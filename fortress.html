@@ -1,0 +1,329 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Fortress Classic</title>
+<style>
+  body { background:#111; color:#0f0; text-align:center; font-family:monospace; }
+  canvas { background:#000; display:block; margin:10px auto; border:2px solid #0f0; }
+</style>
+</head>
+<body>
+
+<h2>FORTRESS CLASSIC (2P TURN-BASED)</h2>
+<div id="info"></div>
+<canvas id="game" width="900" height="450"></canvas>
+
+<script>
+/* =====================
+   기본 설정
+===================== */
+const canvas = document.getElementById("game");
+const ctx = canvas.getContext("2d");
+const info = document.getElementById("info");
+
+const gravity = 0.15;
+const TANK_HEIGHT = 6;
+const GROUND_OFFSET = 2;
+const DAMAGE_MULTIPLIER = 1.3;
+
+let wind = 0;
+let bullet = null;
+let explosion = null;
+let deathExplosion = null;
+
+let currentPlayer = 0;
+let gameOver = false;
+let winner = null;
+let gameOverPending = false;
+
+/* =====================
+   사운드 (WebAudio)
+===================== */
+const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+
+function tone(freq, start, duration, volume=0.15) {
+  const osc = audioCtx.createOscillator();
+  const gain = audioCtx.createGain();
+  osc.type = "square";
+  osc.frequency.value = freq;
+  osc.connect(gain);
+  gain.connect(audioCtx.destination);
+  gain.gain.setValueAtTime(volume, audioCtx.currentTime + start);
+  gain.gain.exponentialRampToValueAtTime(
+    0.001, audioCtx.currentTime + start + duration
+  );
+  osc.start(audioCtx.currentTime + start);
+  osc.stop(audioCtx.currentTime + start + duration);
+}
+
+function fireSound()      { tone(600, 0, 0.15, 0.12); }
+function explodeSound()   { tone(120, 0, 0.4, 0.18); }
+function finalBoomSound() { tone(60,  0, 1.2, 0.25); }
+
+// 🎵 승리 멜로디 (상승)
+function victoryMelody() {
+  [440, 554, 659, 880].forEach((f,i)=>tone(f, i*0.18, 0.25, 0.18));
+}
+
+// 🎵 패배 멜로디 (하강)
+function defeatMelody() {
+  [440, 392, 330, 220].forEach((f,i)=>tone(f, i*0.22, 0.35, 0.18));
+}
+
+/* =====================
+   지형
+===================== */
+const terrain = [];
+for (let x = 0; x < canvas.width; x++) {
+  terrain[x] = 300 + Math.sin(x * 0.01) * 30;
+}
+
+/* =====================
+   플레이어
+===================== */
+const players = [
+  { x:120, angle:45,  power:9, hp:100, y:0, alive:true, color:"#f00", name:"PLAYER 1" },
+  { x:780, angle:135, power:9, hp:100, y:0, alive:true, color:"#00f", name:"PLAYER 2" }
+];
+
+players.forEach(p=>{
+  p.y = Math.min(terrain[p.x] - GROUND_OFFSET, canvas.height - TANK_HEIGHT);
+});
+
+/* =====================
+   턴
+===================== */
+function newTurn() {
+  wind = +(Math.random()*2 - 1).toFixed(2);
+  bullet = null;
+  explosion = null;
+}
+newTurn();
+
+/* =====================
+   발사
+===================== */
+function fire() {
+  const p = players[currentPlayer];
+  const rad = p.angle * Math.PI/180;
+  bullet = {
+    x:p.x, y:p.y,
+    vx:Math.cos(rad)*p.power,
+    vy:-Math.sin(rad)*p.power
+  };
+  fireSound();
+}
+
+/* =====================
+   입력
+===================== */
+document.addEventListener("keydown", e=>{
+  if (gameOver || bullet) return;
+  const p = players[currentPlayer];
+  if (!p.alive) return;
+
+  if (e.key==="ArrowLeft")  p.angle = Math.min(p.angle+2,180);
+  if (e.key==="ArrowRight") p.angle = Math.max(p.angle-2,0);
+  if (e.key==="ArrowUp")    p.power = Math.min(p.power+0.5,15);
+  if (e.key==="ArrowDown")  p.power = Math.max(p.power-0.5,2);
+  if (e.key===" ") fire();
+});
+
+/* =====================
+   폭발
+===================== */
+function explode(x,y) {
+  explodeSound();
+  const radius = 25;
+  explosion = {x,y,r:radius,life:15};
+
+  for (let i=Math.max(0,x-radius); i<Math.min(canvas.width,x+radius); i++) {
+    const dy = Math.sqrt(radius*radius - (i-x)**2);
+    terrain[i] = Math.max(terrain[i], y+dy);
+  }
+
+  players.forEach((p,idx)=>{
+    if (!p.alive) return;
+
+    const dist = Math.hypot(p.x-x, p.y-y);
+    if (dist<radius) {
+      const dmg = Math.floor((radius-dist)*2*DAMAGE_MULTIPLIER);
+      p.hp = Math.max(0, p.hp-dmg);
+    }
+
+    if (p.hp===0 && p.alive) {
+      p.alive=false;
+      triggerDeath(p, idx);
+    }
+
+    p.y = Math.min(
+      terrain[p.x]-GROUND_OFFSET,
+      canvas.height-TANK_HEIGHT
+    );
+  });
+
+  bullet=null;
+  if (!gameOverPending) {
+    currentPlayer = 1-currentPlayer;
+    setTimeout(newTurn,500);
+  }
+}
+
+/* =====================
+   사망 처리
+===================== */
+function triggerDeath(p, idx) {
+  finalBoomSound();
+  deathExplosion = {x:p.x,y:p.y,r:0,life:40};
+  winner = idx===0 ? 2 : 1;
+  gameOverPending = true;
+
+  setTimeout(()=>{
+    gameOver = true;
+    victoryMelody();
+    defeatMelody();
+  }, 900);
+}
+
+/* =====================
+   업데이트
+===================== */
+function update() {
+  if (bullet) {
+    bullet.x += bullet.vx + wind;
+    bullet.y += bullet.vy;
+    bullet.vy += gravity;
+
+    if (
+      bullet.x<0 || bullet.x>=canvas.width ||
+      bullet.y>=terrain[Math.floor(bullet.x)]
+    ) explode(Math.floor(bullet.x), bullet.y);
+  }
+
+  if (explosion && --explosion.life<=0) explosion=null;
+
+  if (deathExplosion) {
+    deathExplosion.r += 2;
+    if (--deathExplosion.life<=0) deathExplosion=null;
+  }
+}
+
+/* =====================
+   렌더링
+===================== */
+function drawTerrain() {
+  ctx.fillStyle="#0f0";
+  for (let x=0;x<canvas.width;x++) {
+    ctx.fillRect(x,terrain[x],1,canvas.height-terrain[x]);
+  }
+}
+
+function drawTank(p) {
+  if (!p.alive) return;
+  ctx.fillStyle=p.color;
+  ctx.fillRect(p.x-6,p.y-TANK_HEIGHT,12,TANK_HEIGHT);
+
+  const rad=p.angle*Math.PI/180;
+  ctx.strokeStyle=p.color;
+  ctx.beginPath();
+  ctx.moveTo(p.x,p.y-TANK_HEIGHT);
+  ctx.lineTo(
+    p.x+Math.cos(rad)*18,
+    p.y-TANK_HEIGHT-Math.sin(rad)*18
+  );
+  ctx.stroke();
+}
+
+function drawTrajectory() {
+  if (gameOver || bullet) return;
+  const p = players[currentPlayer];
+  if (!p.alive) return;
+
+  const rad=p.angle*Math.PI/180;
+  let x=p.x,y=p.y;
+  let vx=Math.cos(rad)*p.power;
+  let vy=-Math.sin(rad)*p.power;
+
+  ctx.fillStyle="#444";
+  for (let i=0;i<25;i++) {
+    x+=vx+wind; y+=vy; vy+=gravity;
+    ctx.fillRect(x,y,2,2);
+    if (x<0||x>=canvas.width||y>terrain[Math.floor(x)]) break;
+  }
+}
+
+function drawWind() {
+  const cx=canvas.width/2, cy=30;
+  ctx.strokeStyle="#0ff"; ctx.lineWidth=2;
+
+  ctx.beginPath();
+  ctx.moveTo(cx-60,cy); ctx.lineTo(cx+60,cy); ctx.stroke();
+
+  const len=wind*40;
+  ctx.beginPath();
+  ctx.moveTo(cx,cy); ctx.lineTo(cx+len,cy); ctx.stroke();
+
+  const d=Math.sign(len)||1;
+  ctx.beginPath();
+  ctx.moveTo(cx+len,cy);
+  ctx.lineTo(cx+len-8*d,cy-5);
+  ctx.lineTo(cx+len-8*d,cy+5);
+  ctx.fillStyle="#0ff"; ctx.fill();
+
+  ctx.font="14px monospace";
+  ctx.textAlign="center";
+  ctx.fillText(`WIND ${wind}`,cx,cy-10);
+}
+
+function drawUI() {
+  const p=players[currentPlayer];
+  info.innerHTML = `
+    TURN: <span style="color:${p.color}">${p.name}</span> |
+    Angle ${p.angle.toFixed(0)} |
+    Power ${p.power.toFixed(1)} |
+    HP:
+    <span style="color:${players[0].color}">P1 ${players[0].hp}</span> /
+    <span style="color:${players[1].color}">P2 ${players[1].hp}</span>
+  `;
+}
+
+function drawGameOver() {
+  if (!gameOver) return;
+  ctx.fillStyle="rgba(0,0,0,0.7)";
+  ctx.fillRect(0,0,canvas.width,canvas.height);
+  ctx.fillStyle="#fff";
+  ctx.font="42px monospace";
+  ctx.textAlign="center";
+  ctx.fillText(
+    `PLAYER ${winner} WINS`,
+    canvas.width/2,
+    canvas.height/2
+  );
+}
+
+/* =====================
+   루프
+===================== */
+function draw() {
+  ctx.clearRect(0,0,canvas.width,canvas.height);
+  drawTerrain();
+  drawTrajectory();
+  players.forEach(drawTank);
+  if (bullet) ctx.fillRect(bullet.x,bullet.y,3,3);
+  drawWind();
+  drawGameOver();
+  drawUI();
+}
+
+function loop() {
+  update();
+  draw();
+  requestAnimationFrame(loop);
+}
+loop();
+</script>
+
+</body>
+</html>
+
