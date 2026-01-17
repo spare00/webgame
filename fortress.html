@@ -36,6 +36,49 @@ let currentPlayer = 0;
 let gameOver = false;
 let winner = null;
 let gameOverPending = false;
+/* =====================
+   재시작
+===================== */
+function resetGame() {
+  // 게임 상태
+  gameOver = false;
+  gameOverPending = false;
+  winner = null;
+  bullet = null;
+  explosion = null;
+  deathExplosion = null;
+
+  // 턴 초기화
+  currentPlayer = 0;
+
+  // 플레이어 초기화
+  players[0].hp = 100;
+  players[1].hp = 100;
+  players[0].alive = true;
+  players[1].alive = true;
+
+  players[0].angle = 45;
+  players[1].angle = 135;
+  players[0].power = 9;
+  players[1].power = 9;
+
+  // 지형 재생성
+  for (let x = 0; x < canvas.width; x++) {
+    terrain[x] = 300 + Math.sin(x * 0.01) * 30;
+  }
+
+  // 탱크 위치 재정렬 (바닥 밑으로 안 내려가게)
+  players.forEach(p => {
+    p.y = Math.min(
+      terrain[p.x] - GROUND_OFFSET,
+      canvas.height - TANK_HEIGHT
+    );
+  });
+
+  // 새 턴 시작 (바람 포함)
+  newTurn();
+}
+
 
 /* =====================
    사운드 (WebAudio)
@@ -118,16 +161,78 @@ function fire() {
 /* =====================
    입력
 ===================== */
-document.addEventListener("keydown", e=>{
+document.addEventListener("keydown", (e) => {
+
+  /* =====================
+     🔁 R 키 재시작은 항상 허용
+  ===================== */
+  if (e.key === "r" || e.key === "R") {
+    resetGame();
+    return;
+  }
+
+  // 게임 종료 중이거나 탄이 날아가는 중이면 입력 무시
   if (gameOver || bullet) return;
+
   const p = players[currentPlayer];
   if (!p.alive) return;
 
-  if (e.key==="ArrowLeft")  p.angle = Math.min(p.angle+2,180);
-  if (e.key==="ArrowRight") p.angle = Math.max(p.angle-2,0);
-  if (e.key==="ArrowUp")    p.power = Math.min(p.power+0.5,15);
-  if (e.key==="ArrowDown")  p.power = Math.max(p.power-0.5,2);
-  if (e.key===" ") fire();
+  const ANGLE_STEP = 2;
+  const POWER_STEP = 0.5;
+
+  // 🔴 P1: +1 / 🔵 P2: -1
+  // (각도 조작을 시각적으로 동일하게 만들기 위한 보정)
+  const angleDir = currentPlayer === 0 ? 1 : -1;
+
+  switch (e.key) {
+
+    /* =====================
+       각도 조절 (⬆⬇)
+    ===================== */
+    case "ArrowUp":
+      p.angle = Math.min(
+        180,
+        Math.max(0, p.angle + ANGLE_STEP * angleDir)
+      );
+      break;
+
+    case "ArrowDown":
+      p.angle = Math.min(
+        180,
+        Math.max(0, p.angle - ANGLE_STEP * angleDir)
+      );
+      break;
+
+    /* =====================
+       파워 조절 (⬅➡, 플레이어별 반전)
+    ===================== */
+    case "ArrowRight":
+      if (currentPlayer === 0) {
+        // 🔴 P1: →
+        p.power = Math.min(15, p.power + POWER_STEP);
+      } else {
+        // 🔵 P2: →
+        p.power = Math.max(2, p.power - POWER_STEP);
+      }
+      break;
+
+    case "ArrowLeft":
+      if (currentPlayer === 0) {
+        // 🔴 P1: ←
+        p.power = Math.max(2, p.power - POWER_STEP);
+      } else {
+        // 🔵 P2: ← (요청 사항)
+        p.power = Math.min(15, p.power + POWER_STEP);
+      }
+      break;
+
+    /* =====================
+       발사
+    ===================== */
+    case " ":
+      fire();
+      break;
+  }
 });
 
 /* =====================
@@ -277,10 +382,19 @@ function drawWind() {
 }
 
 function drawUI() {
-  const p=players[currentPlayer];
+  const p = players[currentPlayer];
+
+  // 🔧 UI 표시용 각도 보정
+  // P1(빨강): 그대로
+  // P2(파랑): 180 - 실제 각도
+  const displayAngle =
+    currentPlayer === 0
+      ? p.angle
+      : 180 - p.angle;
+
   info.innerHTML = `
     TURN: <span style="color:${p.color}">${p.name}</span> |
-    Angle ${p.angle.toFixed(0)} |
+    Angle ${displayAngle.toFixed(0)} |
     Power ${p.power.toFixed(1)} |
     HP:
     <span style="color:${players[0].color}">P1 ${players[0].hp}</span> /
