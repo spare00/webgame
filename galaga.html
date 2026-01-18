@@ -32,6 +32,9 @@
     const canvas = document.getElementById('game');
     const ctx = canvas.getContext('2d');
 
+    // Toggle for running in-browser tests (kept, but disabled by default so gameplay isn't affected)
+    const RUN_TESTS = false;
+
     // =====================
     // Game State
     // =====================
@@ -41,7 +44,12 @@
     let gameOver = false;
     let started = false;
 
+    // localStorage key: galaga_highscore
     let highScore = Number(localStorage.getItem('galaga_highscore') || 0);
+
+    // High-score blink effect state
+    let hiBlinkTimer = 0; // frames remaining to blink when updated
+    let hiSoundPlayed = false; // prevent repeated sound during blink
 
     // =====================
     // Player
@@ -61,6 +69,7 @@
     let bullets = [];
     let enemyBullets = [];
     let explosions = [];
+    let captureBeams = [];
 
     let enemies = [];
     const enemyRows = 4;
@@ -76,6 +85,7 @@
     const audioCtx = new AudioCtx();
 
     function beep(freq, duration = 0.08) {
+      if (__TESTING) return;
       // Browsers may start AudioContext suspended until user gesture.
       if (audioCtx.state === 'suspended') audioCtx.resume();
       const osc = audioCtx.createOscillator();
@@ -127,7 +137,7 @@
           w: 60,
           h: 30,
           alive: true,
-          hp: 2,
+          hp: 8,
           hitFlash: 0,
           state: 'formation',
           angle: 0,
@@ -146,6 +156,7 @@
       bullets = [];
       enemyBullets = [];
       explosions = [];
+      captureBeams = [];
 
       // In real gameplay we want a brief invincibility after restart.
       // For deterministic unit tests, the suite expects immediate vulnerability.
@@ -160,16 +171,22 @@
     // Input (Keyboard + simple mobile)
     // =====================
     const keys = {};
+
     document.addEventListener('keydown', (e) => {
       keys[e.key] = true;
+
       if (!started && e.key === ' ') started = true;
       if (gameOver && e.key === ' ') {
         resetGame();
         started = true;
       }
+
       if (e.key === ' ' || e.key.startsWith('Arrow')) e.preventDefault();
     }, { passive: false });
-    document.addEventListener('keyup', (e) => keys[e.key] = false);
+
+    document.addEventListener('keyup', (e) => {
+      keys[e.key] = false;
+    });
 
     // Mobile: touch left/right to move, tap top area to shoot (lightweight)
     canvas.addEventListener('touchstart', (e) => {
@@ -202,38 +219,41 @@
     // =====================
     // Helpers
     // =====================
-    function shoot() {
-      bullets.push({ x: player.x + player.w / 2 - 2, y: player.y, w: 4, h: 8, dead: false });
-      if (!__TESTING) beep(800);
-    }
-
-    function enemyShoot(e) {
-      enemyBullets.push({ x: e.x + e.w / 2 - 2, y: e.y + e.h, w: 4, h: 8, dead: false });
-      if (!__TESTING) beep(300);
-    }
-
-    function explode(x, y) {
-      explosions.push({ x, y, life: 20 });
-      if (!__TESTING) beep(500, 0.1);
-    }
-
     function aabb(ax, ay, aw, ah, bx, by, bw, bh) {
       return ax < bx + bw && ax + aw > bx && ay < by + bh && ay + ah > by;
     }
 
     function formationX(e, t) {
-      // NOTE: In live gameplay we add a gentle lateral sway.
       // In tests we keep formation static for deterministic collisions.
+      if (__TESTING) return e.baseX;
       return e.baseX + Math.sin(t / 500 + e.baseY) * 10;
     }
 
-    let lastShot = 0;
+    function shoot() {
+      bullets.push({ x: player.x + player.w / 2 - 2, y: player.y, w: 4, h: 8, dead: false });
+      beep(800);
+    }
+
+    function enemyShoot(e) {
+      enemyBullets.push({ x: e.x + e.w / 2 - 2, y: e.y + e.h, w: 4, h: 8, dead: false });
+      beep(300);
+    }
+
+    function explode(x, y, isBoss = false) {
+      explosions.push({ x, y, life: 20 });
+
+      if (isBoss) {
+        // Boss kill sound: lower, heavier
+        beep(180, 0.4);
+        setTimeout(() => beep(120, 0.4), 120);
+      } else {
+        beep(500, 0.1);
+      }
+    }
 
     // =====================
     // Capture Beam (Boss)
     // =====================
-    let captureBeams = [];
-
     function fireCaptureBeam(boss) {
       captureBeams.push({
         x: boss.x + boss.w / 2 - 8,
@@ -245,6 +265,8 @@
       });
       boss.capturing = true;
     }
+
+    let lastShot = 0;
 
     // =====================
     // Update
@@ -274,7 +296,7 @@
         }
       }
 
-            // Enemies
+      // Enemies
       for (const en of enemies) {
         // Boss capture beam trigger (live only)
         if (!__TESTING && en.type === 'boss' && en.alive && !en.capturing && Math.random() < 0.002) {
@@ -285,14 +307,8 @@
         if (en.type === 'boss' && en.hitFlash > 0) en.hitFlash--;
 
         if (en.state === 'formation') {
-          if (__TESTING) {
-            // Keep formation stable for unit tests (prevents flaky collision tests)
-            en.x = en.baseX;
-            en.y = en.baseY;
-          } else {
-            en.x = formationX(en, time);
-            en.y = en.baseY;
-          }
+          en.x = formationX(en, time);
+          en.y = en.baseY;
         } else {
           en.angle += 0.05;
           en.y += en.speed * 2;
@@ -328,6 +344,7 @@
             if (en.type === 'boss') {
               en.hp -= 1;
               en.hitFlash = 10;
+
               if (en.hp <= 0) {
                 en.alive = false;
                 score += 400;
@@ -338,7 +355,7 @@
                 });
                 captureBeams = captureBeams.filter(beam => beam.active);
 
-                explode(en.x + en.w / 2, en.y + en.h / 2);
+                explode(en.x + en.w / 2, en.y + en.h / 2, true);
               } else {
                 score += 200;
                 explode(en.x + en.w / 2, en.y + en.h / 2);
@@ -348,13 +365,14 @@
               score += 100;
               explode(en.x + en.w / 2, en.y + en.h / 2);
             }
+
             break;
           }
         }
       }
       bullets = bullets.filter(b => !b.dead && b.y > 0);
 
-            // Capture beam collision
+      // Capture beam collision
       for (const beam of captureBeams) {
         if (!beam.active) continue;
         if (player.invincible === 0 && aabb(player.x, player.y, player.w, player.h, beam.x, beam.y, beam.w, beam.h)) {
@@ -378,10 +396,10 @@
       }
       enemyBullets = enemyBullets.filter(b => !b.dead && b.y < canvas.height);
 
-            // Capture beams cleanup
+      // Capture beams cleanup
       captureBeams = captureBeams.filter(b => b.active);
 
-            // Explosions
+      // Explosions
       explosions.forEach(ex => ex.life--);
       explosions = explosions.filter(ex => ex.life > 0);
 
@@ -391,9 +409,12 @@
         initEnemies();
       }
 
+      // High score update
       if (score > highScore) {
         highScore = score;
-        localStorage.setItem('galaga_highscore', highScore);
+        localStorage.setItem('galaga_highscore', String(highScore));
+        hiBlinkTimer = 120; // ~2 seconds at 60fps
+        hiSoundPlayed = false; // allow sound once
       }
     }
 
@@ -421,7 +442,8 @@
         ctx.fillRect(en.x + 6, en.y + 6, en.w - 12, en.h - 12);
         ctx.fillStyle = pulse ? '#00e5ff' : '#00b8d4';
         ctx.fillRect(en.x + en.w / 2 - 6, en.y + en.h / 2 - 6, 12, 12);
-        // hp indicator (tiny blocks)
+
+        // HP indicator (tiny blocks)
         ctx.fillStyle = '#e7ffff';
         for (let i = 0; i < Math.max(0, en.hp); i++) {
           ctx.fillRect(en.x + 4 + i * 8, en.y - 6, 6, 4);
@@ -459,6 +481,7 @@
         ctx.font = '16px monospace';
         ctx.fillText('PRESS SPACE TO START', 120, 300);
         ctx.fillText(`HIGH SCORE: ${highScore}`, 140, 340);
+        ctx.font = '12px monospace';
         ctx.fillText('MOBILE: tap lower left/right to move, tap top to shoot', 18, 610);
         return;
       }
@@ -474,7 +497,7 @@
       ctx.fillStyle = '#40c4ff';
       enemyBullets.forEach(b => ctx.fillRect(b.x, b.y, b.w, b.h));
 
-            // Capture beams
+      // Capture beams
       ctx.fillStyle = 'rgba(0,255,255,0.3)';
       captureBeams.forEach(b => ctx.fillRect(b.x, b.y, b.w, b.h));
 
@@ -488,7 +511,22 @@
       ctx.fillStyle = '#0f0';
       ctx.font = '16px monospace';
       ctx.fillText(`SCORE: ${score}`, 10, 20);
+
+      // High score blink when updated
+      if (hiBlinkTimer > 0) {
+        hiBlinkTimer--;
+        if (!hiSoundPlayed) {
+          beep(1200, 0.15); // high-score chime
+          hiSoundPlayed = true;
+        }
+        const on = Math.floor(hiBlinkTimer / 10) % 2 === 0; // blink
+        ctx.fillStyle = on ? '#ffffff' : '#0f0';
+      } else {
+        ctx.fillStyle = '#0f0';
+      }
       ctx.fillText(`HI: ${highScore}`, 180, 20);
+
+      ctx.fillStyle = '#0f0';
       ctx.fillText(`LIVES: ${lives}`, 320, 20);
       ctx.fillText(`STAGE: ${stage}`, 10, 40);
 
@@ -509,14 +547,14 @@
     // =====================
     // Tests
     // =====================
-    (function runTests() {
+    function runTests() {
       const assert = (c, m) => { if (!c) throw new Error('Test failed: ' + m); };
       __TESTING = true;
 
       resetGame();
       started = true;
 
-      // NEW: Formation should be deterministic in tests
+      // Formation should be deterministic in tests
       const formationEnemy = enemies.find(e => e.type === 'normal');
       const fxBefore = formationEnemy.x;
       update(0);
@@ -544,36 +582,47 @@
       // Bullet removed on hit (sanity)
       assert(bullets.length === 0, 'player bullet should be removed after hit');
 
-      // NEW: Boss should exist on stage 3 and take 2 hits
+      // Boss should exist on stage 3 and take 8 hits
       stage = 3;
       score = 0;
       bullets = [];
       enemyBullets = [];
       explosions = [];
+      captureBeams = [];
       initEnemies();
       started = true;
 
       const boss = enemies.find(e => e.type === 'boss');
       assert(!!boss, 'boss spawns on stage 3');
-      assert(boss.hp === 2, 'boss starts with 2 hp');
+      assert(boss.hp === 8, 'boss starts with 8 hp');
+
+      // Fire beam then kill boss; beam should be cleaned
+      fireCaptureBeam(boss);
+      assert(captureBeams.length === 1, 'boss capture beam created');
 
       // First hit: boss still alive
       bullets.push({ x: boss.x + 1, y: boss.y + boss.h - 2, w: 4, h: 8, dead: false });
       update(0);
       assert(boss.alive, 'boss alive after 1 hit');
-      assert(boss.hp === 1, 'boss hp reduced to 1');
+      assert(boss.hp === 7, 'boss hp reduced to 7');
 
-      // Second hit: boss dies
-      bullets.push({ x: boss.x + 1, y: boss.y + boss.h - 2, w: 4, h: 8, dead: false });
-      update(0);
-      assert(!boss.alive, 'boss dies after 2 hits');
+      // Hit boss until death (8 total hits)
+      for (let i = 0; i < 7; i++) {
+        bullets.push({ x: boss.x + 1, y: boss.y + boss.h - 2, w: 4, h: 8, dead: false });
+        update(0);
+      }
+      assert(!boss.alive, 'boss dies after 8 hits');
       assert(score >= 400, 'boss kill gives >= 400 score');
+      assert(captureBeams.length === 0, 'boss death removes its capture beam');
 
       __TESTING = false;
       console.log('%cAll tests passed', 'color:#0f0');
-    })();
+    }
+
+    if (RUN_TESTS) runTests();
 
     requestAnimationFrame(loop);
   </script>
 </body>
 </html>
+
