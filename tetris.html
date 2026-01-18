@@ -1,0 +1,474 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<title>Tetris Final</title>
+<style>
+body{
+  background:#000;color:#fff;font-family:monospace;
+  display:flex;justify-content:center;margin-top:20px
+}
+canvas{background:#111;border:2px solid #555}
+.panel{margin-left:20px}
+
+#overlay{
+  position:fixed;
+  inset:0;
+  background:rgba(0,0,0,0.85);
+  color:#fff;
+  display:none;
+  align-items:center;
+  justify-content:center;
+  text-align:center;
+  z-index:10;
+}
+#overlay h1{margin-bottom:10px}
+#overlay p{margin:5px 0}
+
+.flash {
+  animation: flash 0.25s ease-out;
+}
+
+@keyframes flash {
+  from { background: rgba(255,255,255,0.35); }
+  to   { background: rgba(0,0,0,0); }
+}
+
+.level-up {
+  animation: pop 0.4s ease-out;
+}
+
+@keyframes pop {
+  0%   { transform: scale(1);   color: #fff; }
+  50%  { transform: scale(1.6); color: #ff0; }
+  100% { transform: scale(1);   color: #fff; }
+}
+
+</style>
+</head>
+<body>
+
+<canvas id="game" width="240" height="480"></canvas>
+
+<div class="panel">
+  <h3>Next</h3>
+  <canvas id="next" width="80" height="80"></canvas>
+  <h3>Score</h3><div id="score">0</div>
+  <h3>High</h3><div id="highScore">0</div>
+  <h3>Level</h3><div id="level">1</div>
+</div>
+
+<div id="overlay">
+  <div>
+    <h1>GAME OVER</h1>
+    <p>Score: <span id="finalScore"></span></p>
+    <p>High Score: <span id="finalHighScore"></span></p>
+    <p>Level: <span id="finalLevel"></span></p>
+    <p style="margin-top:15px">Press <b>R</b> to Restart</p>
+  </div>
+</div>
+
+<script>
+
+/* ===== High Score ===== */
+let bestScore = Number(localStorage.getItem("tetrisHighScore")) || 0;
+
+/* ===== Sound ===== */
+const AudioCtx = window.AudioContext || window.webkitAudioContext;
+const audioCtx = new AudioCtx();
+
+function playSound(freq, duration = 0.08, type = "square", vol = 0.1) {
+  const osc = audioCtx.createOscillator();
+  const gain = audioCtx.createGain();
+
+  osc.type = type;
+  osc.frequency.value = freq;
+
+  gain.gain.value = vol;
+  gain.gain.exponentialRampToValueAtTime(
+    0.0001,
+    audioCtx.currentTime + duration
+  );
+
+  osc.connect(gain);
+  gain.connect(audioCtx.destination);
+
+  osc.start();
+  osc.stop(audioCtx.currentTime + duration);
+}
+
+function playFunnyLineClearSound(lines) {
+  const patterns = [
+    [500, 900],                 // 1줄: 삐용
+    [400, 800, 600],            // 2줄: 뿅뿅
+    [350, 700, 1000, 600],      // 3줄: 퐁↗뽁
+    [300, 600, 1200, 900, 600]  // 4줄: 보너스!
+  ];
+
+  const notes = patterns[Math.min(lines - 1, 3)];
+
+  notes.forEach((freq, i) => {
+    setTimeout(() => {
+      playSound(
+        freq,
+        0.07,
+        i % 2 === 0 ? "square" : "sawtooth",
+        0.18
+      );
+    }, i * 60);
+  });
+}
+
+function playLevelUpSound() {
+  const notes = [600, 900, 1200];
+  notes.forEach((freq, i) => {
+    setTimeout(() => {
+      playSound(freq, 0.12, "triangle", 0.25);
+    }, i * 120);
+  });
+}
+
+/* ===== BGM ===== */
+let bgmInterval = null;
+let bgmOn = true;
+
+const bgmNotes = [
+  262, 330, 392, 330,   // C E G E
+  294, 349, 415, 349,   // D F# G# F#
+  262, 330, 392, 440,   // C E G A
+  392, 330, 294, 262    // G E D C
+];
+
+function playBgmNote(freq, duration = 0.25) {
+  const osc = audioCtx.createOscillator();
+  const gain = audioCtx.createGain();
+
+  osc.type = "square";
+  osc.frequency.value = freq;
+
+  gain.gain.value = 0.05;
+  gain.gain.exponentialRampToValueAtTime(
+    0.0001,
+    audioCtx.currentTime + duration
+  );
+
+  osc.connect(gain);
+  gain.connect(audioCtx.destination);
+
+  osc.start();
+  osc.stop(audioCtx.currentTime + duration);
+}
+
+function startBGM() {
+  if (!bgmOn || bgmInterval) return;
+
+  let index = 0;
+  bgmInterval = setInterval(() => {
+    playBgmNote(bgmNotes[index]);
+    index = (index + 1) % bgmNotes.length;
+  }, 250);
+}
+
+function stopBGM() {
+  clearInterval(bgmInterval);
+  bgmInterval = null;
+}
+
+
+/* ===== Canvas ===== */
+const canvas=document.getElementById("game");
+const ctx=canvas.getContext("2d");
+ctx.scale(20,20);
+
+const nextCanvas=document.getElementById("next");
+const nextCtx=nextCanvas.getContext("2d");
+nextCtx.scale(20,20);
+
+/* ===== Constants ===== */
+const COLS=12, ROWS=24;
+const colors=[null,"#0ff","#00f","#fa0","#ff0","#0f0","#a0f","#f00"];
+
+/* ===== Helpers ===== */
+const createMatrix=(w,h)=>Array.from({length:h},()=>Array(w).fill(0));
+
+const createPiece=t=>({
+  I:[[1,1,1,1]],
+  J:[[2,0,0],[2,2,2]],
+  L:[[0,0,3],[3,3,3]],
+  O:[[4,4],[4,4]],
+  S:[[0,5,5],[5,5,0]],
+  T:[[0,6,0],[6,6,6]],
+  Z:[[7,7,0],[0,7,7]]
+}[t]);
+
+function rotateMatrixCCW(matrix) {
+  const h = matrix.length;
+  const w = matrix[0].length;
+  const result = Array.from({ length: w },
+    () => Array(h).fill(0)
+  );
+
+  for (let y = 0; y < h; y++) {
+    for (let x = 0; x < w; x++) {
+      result[w - 1 - x][y] = matrix[y][x];
+    }
+  }
+  return result;
+}
+
+/* ===== Game State ===== */
+let arena,gameOver;
+
+const player={
+  pos:{x:0,y:0},
+  matrix:null,next:null,
+  score:0,lines:0,level:1
+};
+
+/* ===== Collision ===== */
+function collide(a,p){
+  for(let y=0;y<p.matrix.length;y++)
+    for(let x=0;x<p.matrix[y].length;x++)
+      if(p.matrix[y][x] &&
+        (a[y+p.pos.y]?.[x+p.pos.x])!==0)
+        return true;
+  return false;
+}
+
+/* ===== Safe Move ===== */
+function movePlayer(dir){
+  player.pos.x += dir;
+  if(collide(arena, player)){
+    player.pos.x -= dir;
+  } else {
+    playSound(600, 0.05);
+  }
+}
+
+/* ===== Merge & Sweep ===== */
+function merge(a,p){
+  p.matrix.forEach((r,y)=>r.forEach((v,x)=>{
+    if(v)a[y+p.pos.y][x+p.pos.x]=v;
+  }));
+}
+
+function sweep(){
+  let cleared=0;
+  outer:for(let y=ROWS-1;y>=0;y--){
+    for(let x=0;x<COLS;x++) if(!arena[y][x]) continue outer;
+    arena.splice(y,1);
+    arena.unshift(Array(COLS).fill(0));
+    cleared++; y++;
+  }
+  if(cleared){
+    playFunnyLineClearSound(cleared);
+
+    player.lines+=cleared;
+    player.score+=[0,100,300,500,800][cleared]*player.level;
+    if(player.lines>=player.level*10){
+      player.level++;
+      dropInterval=Math.max(100,800-100*(player.level-1));
+
+      // 🎉 LEVEL UP EFFECT
+      playLevelUpSound();
+      flashScreen();
+      animateLevel();
+    }
+    updateUI();
+  }
+}
+
+/* ===== Rotation ===== */
+function rotatePlayer(){
+  const oldMatrix = player.matrix;
+  const oldX = player.pos.x;
+
+  player.matrix = rotateMatrixCCW(oldMatrix);
+
+  let offset = 1;
+  while (collide(arena, player)) {
+    player.pos.x += offset;
+    offset = -(offset + (offset > 0 ? 1 : -1));
+    if (Math.abs(offset) > player.matrix[0].length) {
+      player.matrix = oldMatrix;
+      player.pos.x = oldX;
+      return;
+    }
+  }
+
+  // 회전 성공 사운드
+  playSound(750, 0.06, "triangle");
+}
+
+/* ===== Drop ===== */
+function drop(){
+  player.pos.y++;
+  if(collide(arena, player)){
+    player.pos.y--;
+    merge(arena, player);
+    sweep();
+    resetPlayer();
+    playSound(120, 0.12, "sawtooth");
+  } else {
+    playSound(300, 0.03, "square", 0.05);
+  }
+  dropCounter = 0;
+}
+
+function hardDrop(){
+  while(!collide(arena, player)){
+    player.pos.y++;
+    player.score += 2;
+  }
+  player.pos.y--;
+  merge(arena, player);
+  sweep();
+  resetPlayer();
+  playSound(90, 0.18, "sawtooth", 0.15);
+  updateUI();
+}
+
+/* ===== Player Reset ===== */
+const randomPiece=()=>{
+  const p="TJLOSZI";
+  return createPiece(p[Math.random()*p.length|0]);
+};
+
+function resetPlayer(){
+  if(!player.next) player.next=randomPiece();
+  player.matrix=player.next;
+  player.next=randomPiece();
+  player.pos.y=0;
+  player.pos.x=(COLS/2|0)-(player.matrix[0].length/2|0);
+  drawNext();
+
+  if(collide(arena,player)){
+    endGame();
+  }
+}
+
+/* ===== Draw ===== */
+function drawMatrix(m,o,c){
+  m.forEach((r,y)=>r.forEach((v,x)=>{
+    if(v){
+      c.fillStyle=colors[v];
+      c.fillRect(x+o.x,y+o.y,1,1);
+    }
+  }));
+}
+
+function draw(){
+  ctx.fillStyle="#000";
+  ctx.fillRect(0,0,canvas.width,canvas.height);
+  drawMatrix(arena,{x:0,y:0},ctx);
+  drawMatrix(player.matrix,player.pos,ctx);
+}
+
+function drawNext(){
+  nextCtx.fillStyle="#000";
+  nextCtx.fillRect(0,0,4,4);
+  drawMatrix(player.next,{x:1,y:1},nextCtx);
+}
+
+function updateUI(){
+  score.textContent=player.score;
+  level.textContent=player.level;
+  document.getElementById("highScore").textContent = bestScore;
+}
+
+/* ===== Game Over ===== */
+function endGame(){
+  gameOver = true;
+
+  if (player.score > bestScore) {
+    bestScore = player.score;
+    localStorage.setItem("tetrisHighScore", bestScore);
+
+    playSound(1200, 0.25, "triangle", 0.3);
+
+    const hs = document.getElementById("highScore");
+    hs.style.color = "#ff0";
+    setTimeout(() => hs.style.color = "#fff", 500);
+  }
+
+  updateUI();
+
+  finalScore.textContent = player.score;
+  finalLevel.textContent = player.level;
+  finalHighScore.textContent = bestScore;
+
+  overlay.style.display = "flex";
+  playSound(60, 0.5, "sine", 0.2);
+}
+
+/* ====== Level Up effect ===== */
+function flashScreen() {
+  const f = document.createElement("div");
+  f.style.position = "fixed";
+  f.style.inset = 0;
+  f.style.pointerEvents = "none";
+  f.style.background = "rgba(255,255,255,0.35)";
+  f.className = "flash";
+  document.body.appendChild(f);
+  setTimeout(() => f.remove(), 250);
+}
+
+function animateLevel() {
+  const el = document.getElementById("level");
+  el.classList.remove("level-up"); // 리셋
+  void el.offsetWidth;             // reflow
+  el.classList.add("level-up");
+}
+
+
+/* ===== Loop ===== */
+let dropCounter=0,dropInterval=800,lastTime=0;
+function update(t=0){
+  if(gameOver) return;
+  const d=t-lastTime; lastTime=t;
+  dropCounter+=d;
+  if(dropCounter>dropInterval) drop();
+  draw();
+  requestAnimationFrame(update);
+}
+
+/* ===== Input ===== */
+document.addEventListener("keydown",e=>{
+  if(gameOver){
+    if(e.key==="r"||e.key==="R") startGame();
+    return;
+  }
+
+  if (e.key === "b" || e.key === "B") {
+    bgmOn = !bgmOn;
+    if (bgmOn) startBGM();
+    else stopBGM();
+  }
+
+  if(e.key==="ArrowLeft") movePlayer(-1);
+  if(e.key==="ArrowRight") movePlayer(1);
+  if(e.key==="ArrowDown") drop();
+  if(e.key==="ArrowUp") rotatePlayer();
+  if(e.code==="Space") hardDrop();
+});
+
+/* ===== Start / Restart ===== */
+function startGame(){
+  arena=createMatrix(COLS,ROWS);
+  player.score=0;player.lines=0;player.level=1;
+  player.next=null;
+  gameOver=false;
+  overlay.style.display="none";
+  dropInterval=800;
+  resetPlayer();
+  updateUI();
+  update();
+  startBGM();
+
+}
+
+startGame();
+</script>
+</body>
+</html>
+
