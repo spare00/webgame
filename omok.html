@@ -1,0 +1,306 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<title>오목 20×20 (3×3 금수 수정 최종)</title>
+<style>
+body{
+  background:#111;color:#fff;
+  font-family:system-ui,sans-serif;
+  display:flex;flex-direction:column;align-items:center;
+  margin-top:20px;
+}
+canvas{background:#d8b56a;border:3px solid #333;}
+#status{margin:10px;}
+.turn{font-size:20px;opacity:.4}
+.turn.active{opacity:1;font-weight:bold;transform:scale(1.2)}
+#turn-black{color:#000;background:#fff;padding:2px 8px;border-radius:6px}
+#turn-white{color:#fff;background:#444;padding:2px 8px;border-radius:6px}
+#msg{margin:10px;font-size:20px;color:#ffd700}
+</style>
+</head>
+
+<body>
+
+<h2>오목 20 × 20</h2>
+
+<div id="status">
+  <span id="turn-black" class="turn active">● 흑</span>
+  <span style="margin:0 10px;">vs</span>
+  <span id="turn-white" class="turn">● 백</span>
+</div>
+
+<div id="msg"></div>
+
+<button onclick="resetGame()">다시 시작</button><br>
+
+<canvas id="board" width="600" height="600"></canvas>
+
+<script>
+/* ===== 기본 설정 ===== */
+const SIZE=20, CELL=30, R=12;
+const BLACK=1, WHITE=2;
+
+const canvas=document.getElementById("board");
+const ctx=canvas.getContext("2d");
+const blackEl=document.getElementById("turn-black");
+const whiteEl=document.getElementById("turn-white");
+const msg=document.getElementById("msg");
+
+/* ===== 사운드 ===== */
+const AudioCtx=window.AudioContext||window.webkitAudioContext;
+const audioCtx=new AudioCtx();
+function playStone(){
+  const o=audioCtx.createOscillator(),g=audioCtx.createGain();
+  o.type="square";o.frequency.value=300;
+  g.gain.value=0.05;
+  o.connect(g);g.connect(audioCtx.destination);
+  o.start();o.stop(audioCtx.currentTime+0.06);
+}
+
+/* ===== 상태 ===== */
+let board,current,gameOver;
+let hover=null;
+
+/* ===== 초기화 ===== */
+function resetGame(){
+  board=Array.from({length:SIZE},()=>Array(SIZE).fill(0));
+  current=BLACK;
+  gameOver=false;
+  hover=null;
+  msg.textContent="";
+  updateTurn();
+  draw();
+}
+resetGame();
+
+function updateTurn(){
+  blackEl.classList.toggle("active",current===BLACK);
+  whiteEl.classList.toggle("active",current===WHITE);
+}
+
+function playForbiddenSound(){
+  const o = audioCtx.createOscillator();
+  const g = audioCtx.createGain();
+
+  o.type = "sawtooth";
+  o.frequency.setValueAtTime(180, audioCtx.currentTime);
+  o.frequency.linearRampToValueAtTime(90, audioCtx.currentTime + 0.15);
+
+  g.gain.value = 0.08;
+
+  o.connect(g);
+  g.connect(audioCtx.destination);
+
+  o.start();
+  o.stop(audioCtx.currentTime + 0.18);
+}
+
+/* ===== 그리기 ===== */
+function draw(){
+  ctx.clearRect(0,0,600,600);
+  ctx.strokeStyle="#333";
+
+  for(let i=0;i<SIZE;i++){
+    ctx.beginPath();
+    ctx.moveTo(CELL/2,CELL/2+i*CELL);
+    ctx.lineTo(CELL/2+(SIZE-1)*CELL,CELL/2+i*CELL);
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(CELL/2+i*CELL,CELL/2);
+    ctx.lineTo(CELL/2+i*CELL,CELL/2+(SIZE-1)*CELL);
+    ctx.stroke();
+  }
+
+  for(let y=0;y<SIZE;y++)
+    for(let x=0;x<SIZE;x++)
+      if(board[y][x]) drawStone(x,y,board[y][x]);
+
+  // 금수 hover 표시
+  if(hover && current===BLACK && isForbiddenMove(hover.y,hover.x)){
+    ctx.fillStyle="red";
+    ctx.beginPath();
+    ctx.arc(CELL/2+hover.x*CELL,CELL/2+hover.y*CELL,5,0,Math.PI*2);
+    ctx.fill();
+  }
+}
+
+function drawStone(x,y,c){
+  ctx.beginPath();
+  ctx.arc(CELL/2+x*CELL,CELL/2+y*CELL,R,0,Math.PI*2);
+  ctx.fillStyle=c===BLACK?"#000":"#fff";
+  ctx.fill();ctx.stroke();
+}
+
+/* ===== 입력 ===== */
+canvas.addEventListener("mousemove",e=>{
+  if(gameOver){hover=null;draw();return;}
+  const r=canvas.getBoundingClientRect();
+  const x=Math.floor((e.clientX-r.left)/CELL);
+  const y=Math.floor((e.clientY-r.top)/CELL);
+  hover=(x>=0&&y>=0&&x<SIZE&&y<SIZE&&board[y][x]===0)?{x,y}:null;
+  draw();
+});
+canvas.addEventListener("mouseleave",()=>{hover=null;draw();});
+
+canvas.addEventListener("click",e=>{
+  if(gameOver) return;
+  const r=canvas.getBoundingClientRect();
+  const x=Math.floor((e.clientX-r.left)/CELL);
+  const y=Math.floor((e.clientY-r.top)/CELL);
+  if(x<0||y<0||x>=SIZE||y>=SIZE) return;
+  if(board[y][x]!==0) return;
+
+  // 🔴 착수 가정
+  board[y][x]=current;
+
+  // 🔴 금수 판정 (흑만)
+  const open3=countOpenThrees(current);
+  const maxL=getMaxLine(y,x,BLACK);
+  if(open3>=2 || maxL>=6){
+    playForbiddenSound(); 
+    board[y][x]=0; // 되돌림
+    return;
+  }
+
+  playStone();
+  draw();
+
+  if(getMaxLine(y,x,current)>=5){
+    msg.textContent=(current===BLACK?"흑":"백")+" 승리!";
+    gameOver=true;
+    return;
+  }
+
+  current=current===BLACK?WHITE:BLACK;
+  updateTurn();
+});
+
+/* ===== 승리/라인 ===== */
+function getMaxLine(r,c,p){
+  const dirs=[[1,0],[0,1],[1,1],[1,-1]];
+  let max=1;
+  for(const[dr,dc]of dirs){
+    let cnt=1;
+    let rr=r+dr,cc=c+dc;
+    while(rr>=0&&cc>=0&&rr<SIZE&&cc<SIZE&&board[rr][cc]===p){
+      cnt++;rr+=dr;cc+=dc;
+    }
+    rr=r-dr;cc=c-dc;
+    while(rr>=0&&cc>=0&&rr<SIZE&&cc<SIZE&&board[rr][cc]===p){
+      cnt++;rr-=dr;cc-=dc;
+    }
+    max=Math.max(max,cnt);
+  }
+  return max;
+}
+
+/* ===================================================
+   ✅ 3×3 금수의 핵심
+   - 착수 후 보드 전체에서
+   - 열린 3 (0 1 1 1 0) 개수 카운트
+=================================================== */
+function countOpenThrees(player){
+  let cnt=0;
+  const dirs=[[0,1],[1,0],[1,1],[1,-1]];
+
+  for(const[dr,dc]of dirs){
+    for(let r=0;r<SIZE;r++){
+      for(let c=0;c<SIZE;c++){
+        let ok=true;
+        for(let i=0;i<5;i++){
+          const rr=r+i*dr, cc=c+i*dc;
+          if(rr<0||cc<0||rr>=SIZE||cc>=SIZE){ok=false;break;}
+        }
+        if(!ok) continue;
+
+        if(
+          board[r][c]===0 &&
+          board[r+dr][c+dc]===player &&
+          board[r+2*dr][c+2*dc]===player &&
+          board[r+3*dr][c+3*dc]===player &&
+          board[r+4*dr][c+4*dc]===0
+        ){
+          cnt++;
+        }
+      }
+    }
+  }
+  return cnt;
+}
+
+function isForbiddenMove(r, c){
+  // 이미 돌이 있으면 금수 아님
+  if (board[r][c] !== 0) return false;
+
+  // 가상 착수 상태에서만 검사
+  return (
+    countOpenThreesVirtual(r, c, player) >= 2 ||
+    getMaxLineVirtual(r, c, player) >= 6
+  );
+}
+
+function countOpenThreesVirtual(r, c, player){
+  let cnt = 0;
+  const dirs = [[0,1],[1,0],[1,1],[1,-1]];
+
+  for (const [dr, dc] of dirs){
+    for (let i = -4; i <= 0; i++){
+      const cells = [];
+      let valid = true;
+
+      for (let k = 0; k < 5; k++){
+        const rr = r + (i+k)*dr;
+        const cc = c + (i+k)*dc;
+        if (rr<0||cc<0||rr>=SIZE||cc>=SIZE){
+          valid = false; break;
+        }
+        if (rr===r && cc===c) cells.push(player);
+        else cells.push(board[rr][cc]);
+      }
+
+      if (!valid) continue;
+
+      if (
+        cells[0]===0 &&
+        cells[4]===0 &&
+        cells[1]===player &&
+        cells[2]===player &&
+        cells[3]===player
+      ){
+        cnt++;
+      }
+    }
+  }
+  return cnt;
+}
+
+function getMaxLineVirtual(r, c, player){
+  const dirs = [[1,0],[0,1],[1,1],[1,-1]];
+  let max = 1;
+
+  for (const [dr, dc] of dirs){
+    let cnt = 1;
+
+    let rr = r+dr, cc = c+dc;
+    while (rr>=0&&cc>=0&&rr<SIZE&&cc<SIZE &&
+          (rr===r&&cc===c ? player : board[rr][cc]) === player){
+      cnt++; rr+=dr; cc+=dc;
+    }
+
+    rr = r-dr; cc = c-dc;
+    while (rr>=0&&cc>=0&&rr<SIZE&&cc<SIZE &&
+          (rr===r&&cc===c ? player : board[rr][cc]) === player){
+      cnt++; rr-=dr; cc-=dc;
+    }
+
+    max = Math.max(max, cnt);
+  }
+  return max;
+}
+
+</script>
+
+</body>
+</html>
+
