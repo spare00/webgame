@@ -73,8 +73,7 @@
     let explosions = [];
 
     // Boss attacks
-    let bossLasers = [];   // damaging long lasers (move like bullets)
-
+    let bossLasers = []; // damaging long lasers (move like bullets)
 
     let enemies = [];
     const enemyRows = 4;
@@ -145,9 +144,7 @@
           hitFlash: 0,
           state: 'formation',
           angle: 0,
-          speed: 1.5 + stage * 0.2,
-          capturing: false,
-          capturedShip: null
+          speed: 1.5 + stage * 0.2
         });
       }
     }
@@ -163,7 +160,6 @@
       explosions = [];
       bossLasers = [];
 
-      // Ensure player is always active on reset
       player.captured = false;
       player.double = false;
 
@@ -235,7 +231,10 @@
     function formationX(e, t) {
       // In tests we keep formation static for deterministic collisions.
       if (__TESTING) return e.baseX;
-      return e.baseX + Math.sin(t / 500 + e.baseY) * 10;
+
+      // Boss moves wider horizontally (2x range)
+      const amp = e.type === 'boss' ? 20 : 10;
+      return e.baseX + Math.sin(t / 500 + e.baseY) * amp;
     }
 
     // =====================
@@ -268,21 +267,39 @@
     // Boss Attacks
     // =====================
     function fireBossLaser(boss) {
-      bossLasers.push({
-        x: boss.x + boss.w / 2 - 6,
-        y: boss.y + boss.h,
-        w: 12,
-        h: 80,
-        speed: 6,
-        active: true,
-        boss
-      });
-      beep(260, 0.06);
-    }
+      // Laser pattern upgrades by stage
+      // stage < 10 : single straight laser
+      // stage >=10 : two spreading lasers (/ \\)
+      // stage >=20 : three-way missiles (/ | \\)
 
-    // Capture beam (disabled for now)
-    function fireCaptureBeam(_boss) {
-      // Intentionally disabled until double-fighter is reintroduced.
+      const baseX = boss.x + boss.w / 2 - 6;
+      const baseY = boss.y + boss.h;
+
+      function spawnLaser(dx) {
+        bossLasers.push({
+          x: baseX,
+          y: baseY,
+          w: 12,
+          h: 80,
+          speed: 6,
+          dx,          // horizontal drift
+          active: true,
+          boss
+        });
+      }
+
+      if (stage >= 20) {
+        spawnLaser(-2.5);
+        spawnLaser(0);
+        spawnLaser(2.5);
+      } else if (stage >= 10) {
+        spawnLaser(-2.5);
+        spawnLaser(2.5);
+      } else {
+        spawnLaser(0);
+      }
+
+      beep(260, 0.06);
     }
 
     let lastShot = 0;
@@ -297,11 +314,12 @@
         player.y = canvas.height - 60;
         player.captured = false;
       }
+
       if (!started || gameOver) return;
 
       if (player.invincible > 0) player.invincible--;
 
-      // Player (disabled while captured)
+      // Player movement
       if (!player.captured) {
         if (keys['ArrowLeft']) player.x -= player.speed;
         if (keys['ArrowRight']) player.x += player.speed;
@@ -327,7 +345,6 @@
       for (const en of enemies) {
         // Boss attacks (live only)
         if (!__TESTING && en.type === 'boss' && en.alive) {
-          // Boss laser only (capture system disabled for now)
           if (Math.random() < 0.004 + stage * 0.001) fireBossLaser(en);
         }
 
@@ -351,7 +368,6 @@
             if (lives <= 0) gameOver = true;
             player.invincible = 60;
             explode(player.x + player.w / 2, player.y + player.h / 2);
-          respawnPlayer();
             respawnPlayer();
           }
 
@@ -380,25 +396,9 @@
                 en.alive = false;
                 score += 400;
 
-                // Remove any active lasers/capture beams owned by this boss
+                // Remove any active lasers owned by this boss
                 bossLasers.forEach(l => { if (l.boss === en) l.active = false; });
                 bossLasers = bossLasers.filter(l => l.active);
-
-                // (capture system disabled) no capture beams to clean
-
-                // If this boss had captured a ship, drop it as a pickup for double fighter
-                if (en.capturedShip) {
-                  fallingShips.push({
-                    x: en.capturedShip.x,
-                    y: en.y + en.h,
-                    w: player.w,
-                    h: player.h,
-                    speed: 3,
-                    picked: false
-                  });
-                  en.capturedShip = null;
-                }
-                en.capturing = false;
 
                 explode(en.x + en.w / 2, en.y + en.h / 2, true);
               } else {
@@ -422,6 +422,7 @@
         if (!laser.active) continue;
 
         laser.y += laser.speed;
+        laser.x += laser.dx || 0;
 
         if (player.invincible === 0 && aabb(player.x, player.y, player.w, player.h, laser.x, laser.y, laser.w, laser.h)) {
           laser.active = false;
@@ -429,17 +430,12 @@
           if (lives <= 0) gameOver = true;
           player.invincible = 60;
           explode(player.x + player.w / 2, player.y + player.h / 2);
+          respawnPlayer();
         }
 
-        if (laser.y > canvas.height) laser.active = false;
+        if (laser.y > canvas.height || laser.x < -40 || laser.x > canvas.width + 40) laser.active = false;
       }
       bossLasers = bossLasers.filter(l => l.active);
-
-      // (capture system disabled) no capture beam update
-
-      // (capture system disabled) player is never captured
-
-      // (double-fighter disabled) no falling ship pickup
 
       // Enemy bullets
       for (const eb of enemyBullets) eb.y += 5;
@@ -451,6 +447,7 @@
           if (lives <= 0) gameOver = true;
           player.invincible = 60;
           explode(player.x + player.w / 2, player.y + player.h / 2);
+          respawnPlayer();
         }
       }
       enemyBullets = enemyBullets.filter(b => !b.dead && b.y < canvas.height);
@@ -559,8 +556,6 @@
         ctx.fillStyle = 'rgba(0,255,255,0.35)';
       });
 
-      // (capture/double disabled) no capture beams or falling ships
-
       // Enemies
       enemies.forEach(en => en.alive && drawEnemy(en, time));
 
@@ -656,22 +651,39 @@
       assert(!!boss, 'boss spawns on stage 3');
       assert(boss.hp === 8, 'boss starts with 8 hp');
 
+      // Stage 1: single laser
+      stage = 1;
+      bossLasers = [];
+      fireBossLaser(boss);
+      assert(bossLasers.length === 1, 'stage <10 fires single laser');
+
+      // Stage 10: two-way spread
+      stage = 10;
+      bossLasers = [];
+      fireBossLaser(boss);
+      assert(bossLasers.length === 2, 'stage >=10 fires two lasers');
+
+      // Stage 20: three-way missiles
+      stage = 20;
+      bossLasers = [];
+      fireBossLaser(boss);
+      assert(bossLasers.length === 3, 'stage >=20 fires three lasers');
+
       // Boss laser damages player and respawns ship
       lives = 3;
       player.invincible = 0;
       player.x = canvas.width / 2 - player.w / 2;
       player.y = canvas.height - 60;
 
-      fireBossLaser(boss);
-      // Place laser directly on player for guaranteed hit
       bossLasers[0].x = player.x;
       bossLasers[0].y = player.y;
       update(0);
       assert(lives === 2, 'boss laser reduces lives by 1');
-      assert(player.captured === false, 'player should not be captured by boss laser');
-      assert(player.y === canvas.height - 60, 'player respawns at bottom after hit');
+      assert(player.y === canvas.height - 60, 'player respawns at bottom after boss laser hit');
 
       // Kill boss and ensure lasers are cleaned
+      bossLasers = [];
+      stage = 3;
       for (let i = 0; i < 8; i++) {
         bullets.push({ x: boss.x + 1, y: boss.y + boss.h - 2, w: 4, h: 8, dead: false });
         update(0);
