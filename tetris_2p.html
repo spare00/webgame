@@ -169,8 +169,7 @@ class Board {
     this.shake = 0;
     this.gameOver = false;
 
-    this.level = 1;
-    this.linesCleared = 0;
+    this.level = globalLevel;   // 전역 레벨 참조
 
     this.nextPiece = this.randomPiece();
     this.spawn();
@@ -237,15 +236,26 @@ class Board {
       }
     }
 
-    if(cleared){
-      this.linesCleared += cleared;
-      const nl = Math.floor(this.linesCleared/10)+1;
-      if(nl!==this.level){
-        this.level = nl;
-        this.levelElem.textContent = "Level "+this.level;
+    if (cleared > 0) {
+      // 🔥 전역 줄 누적
+      globalLines += cleared;
+
+      const newLevel = Math.floor(globalLines / 10) + 1;
+
+      if (newLevel !== globalLevel) {
+        globalLevel = newLevel;
+
+        // 🔗 양쪽 레벨 동기화
+        p1.level = globalLevel;
+        p2.level = globalLevel;
+
+        p1.levelElem.textContent = "Level " + globalLevel;
+        p2.levelElem.textContent = "Level " + globalLevel;
       }
+
       SFX.clear();
     }
+
     return cleared;
   }
 
@@ -325,6 +335,10 @@ class Board {
 /* =====================
    🚀 INIT
 ===================== */
+// 🔥 글로벌 레벨 시스템
+let globalLines = 0;
+let globalLevel = 1;
+
 let gameFinished = false;
 
 const p1 = new Board(
