@@ -17,6 +17,72 @@ canvas{background:#d8b56a;border:3px solid #333;}
 #turn-black{color:#000;background:#fff;padding:2px 8px;border-radius:6px}
 #turn-white{color:#fff;background:#444;padding:2px 8px;border-radius:6px}
 #msg{margin:10px;font-size:20px;color:#ffd700}
+
+#top-ui{
+  display:flex;
+  flex-direction:column;
+  align-items:center;
+  gap:10px;
+  margin-bottom:15px;
+}
+
+/* 턴 + 타이머 바 */
+#turn-bar{
+  display:flex;
+  align-items:center;
+  gap:20px;
+  font-size:20px;
+}
+
+.turn{
+  opacity:0.4;
+  padding:4px 10px;
+  border-radius:8px;
+  transition:0.2s;
+}
+
+.turn.active{
+  opacity:1;
+  font-weight:bold;
+  background:#ffd700;
+  color:#000;
+}
+
+/* 타이머 */
+#timer{
+  font-size:24px;
+  font-weight:bold;
+  min-width:80px;
+  text-align:center;
+}
+
+/* 스코어 */
+#score{
+  font-size:18px;
+  opacity:0.85;
+}
+
+/* 메시지 */
+#msg{
+  font-size:22px;
+  font-weight:bold;
+  color:#ffd700;
+  min-height:28px;
+}
+
+/* 버튼 */
+#controls{
+  display:flex;
+  gap:10px;
+}
+
+#controls button{
+  padding:6px 14px;
+  font-size:14px;
+  border-radius:6px;
+  cursor:pointer;
+}
+
 </style>
 </head>
 
@@ -24,21 +90,33 @@ canvas{background:#d8b56a;border:3px solid #333;}
 
 <h2>오목 20 × 20</h2>
 
-<div id="status">
-  <span id="turn-black" class="turn active">● 흑</span>
-  <span style="margin:0 10px;">vs</span>
-  <span id="turn-white" class="turn">● 백</span>
-</div>
+<div id="top-ui">
 
-<div id="msg"></div>
+  <!-- 턴 & 타이머 -->
+  <div id="turn-bar">
+    <span id="turn-black" class="turn active">● 흑</span>
 
-<div id="score" style="margin:10px;font-size:18px;">
-  흑 <span id="score-black">0</span> : <span id="score-white">0</span> 백
-</div>
+    <span id="timer">⏱ 10</span>
 
-<button onclick="resetGame()">다시 시작</button><br>
-<div id="timer" style="font-size:22px;margin:10px;color:#00ffcc;">
-  ⏱ 10
+    <span id="turn-white" class="turn">● 백</span>
+  </div>
+
+  <!-- 스코어 -->
+  <div id="score">
+    흑 <span id="score-black">0</span>
+    :
+    <span id="score-white">0</span> 백
+  </div>
+
+  <!-- 메시지 -->
+  <div id="msg"></div>
+
+  <!-- 버튼 -->
+  <div id="controls">
+    <button onclick="resetGame()">다시 시작</button>
+    <button onclick="resetScore()">스코어 리셋</button>
+  </div>
+
 </div>
 
 <canvas id="board" width="600" height="600"></canvas>
@@ -78,7 +156,12 @@ function stopTurnTimer(){
 function updateTimerUI(){
   const t = document.getElementById("timer");
   t.textContent = "⏱ " + turnTime;
-  t.style.color = turnTime <= 3 ? "#ff4444" : "#00ffcc";
+
+  if(turnTime <= 3){
+    t.style.color = "#ff4444";
+  } else {
+    t.style.color = "#00ffcc";
+  }
 }
 
 function handleTimeoutLoss(){
@@ -180,6 +263,12 @@ function updateTurn(){
 function updateScore(){
   document.getElementById("score-black").textContent = scoreBlack;
   document.getElementById("score-white").textContent = scoreWhite;
+}
+
+function resetScore(){
+  scoreBlack = 0;
+  scoreWhite = 0;
+  updateScore();
 }
 
 function playForbiddenSound(){
