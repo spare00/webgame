@@ -145,6 +145,17 @@ const SHAPES = [
   [[0,1,1],[1,1,0]]
 ];
 
+// 🎨 테트로미노 색상 (SHAPES 인덱스와 1:1 매칭)
+const COLORS = [
+  "#0ff", // I
+  "#ff0", // O
+  "#f0f", // T
+  "#0f0", // L
+  "#00f", // J
+  "#f80", // S
+  "#f00"  // Z
+];
+
 function drawBlock(ctx, x, y, size, color, type="normal"){
   ctx.fillStyle = color;
   ctx.fillRect(x, y, size, size);
@@ -175,28 +186,61 @@ class Board {
     this.spawn();
   }
 
+  hardDrop(opponent){
+    if(this.gameOver) return;
+
+    while(!this.collide(this.piece.x, this.piece.y + 1, this.piece.shape)){
+      this.piece.y++;
+    }
+
+    this.merge();
+    const lines = this.clearLines();
+
+    if(lines >= 2){
+      this.combo++;
+      const atk = Math.min(lines - 1 + this.combo, 4);
+      opponent.addGarbage(atk);
+    }else{
+      this.combo = 0;
+    }
+
+    this.spawn();
+    SFX.drop();
+  }
+
   randomPiece(){
-    return SHAPES[Math.random()*SHAPES.length|0];
+    const i = Math.random()*SHAPES.length|0;
+    return {
+      shape: SHAPES[i],
+      color: COLORS[i]
+    };
   }
 
   drawNext(){
     const ctx = this.nextCtx;
     ctx.clearRect(0,0,80,80);
-    const s = this.nextPiece;
+    const s = this.nextPiece.shape;
+    const color = this.nextPiece.color;
     const ox = (4 - s[0].length) * BLOCK / 2;
     const oy = (4 - s.length) * BLOCK / 2;
 
     s.forEach((r,y)=>{
       r.forEach((v,x)=>{
         if(v){
-          drawBlock(ctx, ox+x*BLOCK, oy+y*BLOCK, BLOCK, "#aaa");
+          drawBlock(ctx, ox+x*BLOCK, oy+y*BLOCK, BLOCK, color);
         }
       });
     });
   }
 
   spawn(){
-    this.piece = { shape:this.nextPiece, x:3, y:0 };
+    this.piece = {
+      shape: this.nextPiece.shape,
+      color: this.nextPiece.color,
+      x: 3,
+      y: 0
+    };
+
     this.nextPiece = this.randomPiece();
     this.drawNext();
 
@@ -219,7 +263,9 @@ class Board {
   merge(){
     this.piece.shape.forEach((r,y)=>{
       r.forEach((v,x)=>{
-        if(v) this.grid[this.piece.y+y][this.piece.x+x]=1;
+        if(v) {
+          this.grid[this.piece.y+y][this.piece.x+x] = this.piece.color;
+        }
       });
     });
     SFX.drop();
@@ -306,12 +352,13 @@ class Board {
     this.grid.forEach((r,y)=>{
       r.forEach((v,x)=>{
         if(v){
-          drawBlock(
-            this.ctx,
-            x*BLOCK,y*BLOCK,BLOCK,
-            v===2?"#f33":"#0ff",
-            v===2?"attack":"normal"
-          );
+          if(v === 2){
+            // 공격 블록
+            drawBlock(this.ctx, x*BLOCK, y*BLOCK, BLOCK, "#f33", "attack");
+          } else {
+            // 일반 블록 (색상 유지)
+            drawBlock(this.ctx, x*BLOCK, y*BLOCK, BLOCK, v, "normal");
+          }
         }
       });
     });
@@ -324,7 +371,8 @@ class Board {
             (this.piece.x+x)*BLOCK,
             (this.piece.y+y)*BLOCK,
             BLOCK,
-            "#f0f"
+            this.piece.color,
+            "normal" 
           );
         }
       });
@@ -372,10 +420,21 @@ document.addEventListener("keydown",e=>{
   if(e.key==="s") p1.step(p2);
   if(e.key==="w") p1.rotate();
 
-  if(e.key==="ArrowLeft"){ if(!p2.collide(p2.piece.x-1,p2.piece.y,p2.piece.shape)) p2.piece.x--; SFX.move(); }
-  if(e.key==="ArrowRight"){ if(!p2.collide(p2.piece.x+1,p2.piece.y,p2.piece.shape)) p2.piece.x++; SFX.move(); }
-  if(e.key==="ArrowDown") p2.step(p1);
-  if(e.key==="ArrowUp") p2.rotate();
+  // P1 Hard Drop
+  if(e.key === "q"){
+    p1.hardDrop(p2);
+  }
+
+  if(e.key==="j"){ if(!p2.collide(p2.piece.x-1,p2.piece.y,p2.piece.shape)) p2.piece.x--; SFX.move(); }
+  if(e.key==="l"){ if(!p2.collide(p2.piece.x+1,p2.piece.y,p2.piece.shape)) p2.piece.x++; SFX.move(); }
+  if(e.key==="k") p2.step(p1);
+  if(e.key==="i") p2.rotate();
+
+  // P2 Hard Drop
+  if(e.key === "u"){
+    p2.hardDrop(p1);
+  }
+
 });
 
 function loop(t){
