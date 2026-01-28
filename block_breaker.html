@@ -1,0 +1,498 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>네온 벽돌부수기</title>
+  <style>
+    body{
+      margin:0;
+      background:radial-gradient(circle at top,#121826,#000);
+      color:#0ff;
+      display:flex;
+      justify-content:center;
+      align-items:center;
+      min-height:100vh;
+      font-family:'Segoe UI',Arial,sans-serif;
+    }
+    #gameWrap{ text-align:center; }
+    canvas{
+      background:#020409;
+      border:2px solid #0ff;
+      box-shadow:0 0 20px #0ff,0 0 40px rgba(0,255,255,.25);
+      touch-action:none;
+      max-width:96vw;
+      height:auto;
+    }
+    .info{
+      margin-top:8px;
+      font-size:14px;
+      color:#8ff;
+      text-shadow:0 0 6px #0ff;
+      opacity:.95;
+    }
+  </style>
+</head>
+<body>
+  <div id="gameWrap">
+    <canvas id="game" width="640" height="400"></canvas>
+    <div class="info">← → / 터치 이동 | Space: 시작 · 재시작</div>
+  </div>
+
+  <script>
+    'use strict';
+
+    const canvas = document.getElementById('game');
+    const ctx = canvas.getContext('2d');
+
+    /* =====================
+       🔊 SOUND ENGINE
+    ===================== */
+    const AudioCtx = window.AudioContext || window.webkitAudioContext;
+    const audioCtx = new AudioCtx();
+
+    function beep(freq = 440, dur = 0.08, vol = 0.05, type = 'sine') {
+      // 브라우저 자동재생 정책 대응: 첫 사용자 입력 이후 resume
+      if (audioCtx.state === 'suspended') return;
+      const o = audioCtx.createOscillator();
+      const g = audioCtx.createGain();
+      o.type = type;
+      o.frequency.value = freq;
+      g.gain.value = vol;
+      o.connect(g);
+      g.connect(audioCtx.destination);
+      o.start();
+      o.stop(audioCtx.currentTime + dur);
+    }
+
+    /* =====================
+       🎮 GAME CONSTANTS
+    ===================== */
+    const BASE_SPEED = 3;
+    const BASE_PADDLE_W = Math.round(canvas.width * 0.15); // 화면 비율에 맞춰 패들 기본 너비 확대
+    const MAX_PADDLE_W = 150;
+    const ITEM_DROP_CHANCE = 0.40;
+
+    const brickCfg = {
+      baseRows: 5,
+      cols: 8,
+      w: Math.round(canvas.width * 0.10),
+      h: Math.round(canvas.height * 0.045),
+      pad: Math.round(canvas.width * 0.015),
+      top: Math.round(canvas.height * 0.08),
+      left: Math.round(canvas.width * 0.05)
+    };
+
+    /* =====================
+       🧠 GAME STATE
+    ===================== */
+    let running = false;
+    let score = 0;
+    let lives = 3;
+    let stage = 1;
+
+    // items: expand | multi | speed
+    let items = []; // {x, y, type, dead?}
+
+    // balls array
+    let balls = []; // {x, y, r, dx, dy, dead?}
+
+    // speed boost timer (frames)
+    let speedBoostTimer = 0;
+
+    // high score persistence
+    const HS_KEY = 'neon_breaker_highscore';
+    let highScore = Number(localStorage.getItem(HS_KEY) || 0);
+
+    // paddle
+    const paddle = { w: BASE_PADDLE_W, h: Math.round(canvas.height * 0.03), x: 200, speed: 7 }; // 패들 높이도 화면 비율 반영 // 기본 속도 소폭 증가
+
+    // bricks
+    let bricks = []; // {x, y, hp}
+
+    /* =====================
+       🧰 HELPERS
+    ===================== */
+    function clamp(v, min, max) { return Math.max(min, Math.min(max, v)); }
+
+    function resetBallToStart(oneBallSpeed = BASE_SPEED) {
+      balls = [{
+        x: canvas.width / 2,
+        y: canvas.height - 40,
+        r: 8,
+        dx: oneBallSpeed,
+        dy: -oneBallSpeed
+      }];
+    }
+
+    function initBricksForStage() {
+      bricks = [];
+
+      // === Stage-dependent patterns ===
+      // 1: full grid, 2: checker, 3: pyramid, 4: diamond, 5+: wave
+      const patternType = stage <= 4 ? stage : 5;
+
+      const rows = brickCfg.baseRows + Math.floor((stage - 1) / 2);
+      const cols = brickCfg.cols;
+
+      for (let r = 0; r < rows; r++) {
+        for (let c = 0; c < cols; c++) {
+          let place = true;
+
+          switch (patternType) {
+            case 1: // full
+              place = true;
+              break;
+            case 2: // checker
+              place = (r + c) % 2 === 0;
+              break;
+            case 3: // pyramid (중앙이 넓고 아래로 갈수록 넓어지는 느낌)
+              place = c >= Math.floor(cols / 2) - r && c <= Math.floor(cols / 2) + r;
+              break;
+            case 4: { // diamond
+              const mid = Math.floor(cols / 2);
+              place = Math.abs(c - mid) + Math.abs(r - Math.floor(rows / 2)) <= Math.floor(rows / 2);
+              break;
+            }
+            default: // wave
+              place = (r + Math.floor(Math.sin(c / 2) * 2)) % 2 === 0;
+          }
+
+          if (!place) continue;
+
+          const baseHp = 1;
+          const extraHp = stage >= 3 && Math.random() < 0.30 ? 1 : 0;
+
+          bricks.push({
+            x: brickCfg.left + c * (brickCfg.w + brickCfg.pad),
+            y: brickCfg.top + r * (brickCfg.h + brickCfg.pad),
+            hp: baseHp + extraHp
+          });
+        }
+      }
+    }
+
+    function allBricksCleared() {
+      return bricks.length > 0 && bricks.every(b => b.hp <= 0);
+    }
+
+    function saveHighScoreIfNeeded() {
+      if (score > highScore) {
+        highScore = score;
+        localStorage.setItem(HS_KEY, String(highScore));
+      }
+    }
+
+    /* =====================
+       ⌨️ INPUT
+    ===================== */
+    const keys = {};
+
+    document.addEventListener('keydown', (e) => {
+      keys[e.key] = true;
+      // 사용자 입력 순간 오디오 활성화
+      if (audioCtx.state === 'suspended') audioCtx.resume();
+      if (e.key === ' ') {
+        if (!running) startGame();
+      }
+    });
+
+    document.addEventListener('keyup', (e) => { keys[e.key] = false; });
+
+    canvas.addEventListener('touchstart', () => {
+      if (audioCtx.state === 'suspended') audioCtx.resume();
+      if (!running) startGame();
+    }, { passive: true });
+
+    canvas.addEventListener('touchmove', (e) => {
+      const r = canvas.getBoundingClientRect();
+      const x = e.touches[0].clientX - r.left;
+      paddle.x = x - paddle.w / 2;
+    }, { passive: true });
+
+    /* =====================
+       🚀 GAME FLOW
+    ===================== */
+    function startGame() {
+      running = true;
+      score = 0;
+      lives = 3;
+      stage = 1;
+      items = [];
+      speedBoostTimer = 0;
+
+      paddle.w = BASE_PADDLE_W;
+      paddle.x = (canvas.width - paddle.w) / 2;
+
+      resetBallToStart(BASE_SPEED);
+      initBricksForStage();
+    }
+
+    function nextStage() {
+      stage++;
+      items = [];
+      speedBoostTimer = 0;
+
+      // ✅ 공 기본 속도 소폭 상승
+      const s = BASE_SPEED + (stage - 1) * 0.30;
+      resetBallToStart(s);
+
+      // 난이도 보정: 패들 확장 아이템을 먹었을 수 있으니 기본으로 복귀
+      paddle.w = BASE_PADDLE_W;
+      paddle.x = (canvas.width - paddle.w) / 2;
+
+      initBricksForStage();
+      beep(1500, 0.25, 0.08, 'triangle');
+      beep(900, 0.15, 0.06, 'sine');
+    }
+
+    /* =====================
+       💥 COLLISION
+    ===================== */
+    function hitBricks(ball) {
+      for (const b of bricks) {
+        if (b.hp <= 0) continue;
+        if (
+          ball.x > b.x &&
+          ball.x < b.x + brickCfg.w &&
+          ball.y > b.y &&
+          ball.y < b.y + brickCfg.h
+        ) {
+          ball.dy *= -1;
+          b.hp -= 1;
+          score += 1;
+          beep(700, 0.05, 0.05, 'square');
+
+          if (b.hp <= 0 && Math.random() < ITEM_DROP_CHANCE) {
+            // 공 분열 + 스피드업 + 확장
+            const types = ['expand', 'multi', 'speed'];
+            const type = types[Math.floor(Math.random() * types.length)];
+            items.push({ x: b.x + brickCfg.w / 2, y: b.y, type });
+          }
+          return; // 한 프레임에 다중 충돌 방지
+        }
+      }
+    }
+
+    function updateItems() {
+      for (const it of items) {
+        it.y += 2;
+        // 패들에 닿으면 획득
+        if (
+          it.y > canvas.height - paddle.h &&
+          it.x > paddle.x &&
+          it.x < paddle.x + paddle.w
+        ) {
+          if (it.type === 'expand') {
+            paddle.w = Math.min(MAX_PADDLE_W, paddle.w + 30);
+            beep(300, 0.12, 0.06, 'sine');
+          } else if (it.type === 'multi') {
+            // 현재 공들 각각을 1개씩 더 복제 (대칭 방향)
+            const clones = [];
+            for (const b of balls) {
+              clones.push({ x: b.x, y: b.y, r: b.r, dx: -b.dx, dy: b.dy });
+            }
+            balls = balls.concat(clones);
+            beep(900, 0.12, 0.06, 'triangle');
+          } else if (it.type === 'speed') {
+            // 약 10초 (60fps 기준)
+            speedBoostTimer = 60 * 10;
+            beep(1200, 0.10, 0.06, 'sawtooth');
+          }
+          it.dead = true;
+        }
+        // 화면 밖으로 나가면 제거
+        if (it.y > canvas.height + 20) it.dead = true;
+      }
+      items = items.filter(i => !i.dead);
+    }
+
+    /* =====================
+       🔄 UPDATE
+    ===================== */
+    function update() {
+      if (!running) return;
+
+      // paddle move
+      if (keys['ArrowLeft']) paddle.x -= paddle.speed;
+      if (keys['ArrowRight']) paddle.x += paddle.speed;
+      paddle.x = clamp(paddle.x, 0, canvas.width - paddle.w);
+
+      // speed boost
+      if (speedBoostTimer > 0) speedBoostTimer--;
+      const speedMul = speedBoostTimer > 0 ? 1.60 : 1.0;
+
+      // balls update
+      for (const ball of balls) {
+        ball.x += ball.dx * speedMul;
+        ball.y += ball.dy * speedMul;
+
+        // walls
+        if (ball.x < ball.r || ball.x > canvas.width - ball.r) ball.dx *= -1;
+        if (ball.y < ball.r) ball.dy *= -1;
+
+        // paddle
+        if (
+          ball.y + ball.r > canvas.height - paddle.h &&
+          ball.x > paddle.x &&
+          ball.x < paddle.x + paddle.w
+        ) {
+          ball.dy *= -1;
+          // 살짝 튕김 위치에 따라 각도감
+          const hit = (ball.x - (paddle.x + paddle.w / 2)) / (paddle.w / 2);
+          ball.dx = clamp(ball.dx + hit * 0.5, -6, 6);
+          beep(500, 0.04, 0.05, 'square');
+        }
+
+        // bottom
+        if (ball.y > canvas.height + 20) ball.dead = true;
+
+        hitBricks(ball);
+      }
+
+      balls = balls.filter(b => !b.dead);
+
+      // lose a life when all balls are gone
+      if (balls.length === 0) {
+        lives -= 1;
+        beep(120, 0.20, 0.06, 'sine');
+
+        if (lives <= 0) {
+          running = false;
+          saveHighScoreIfNeeded();
+          return;
+        }
+        // respawn single ball
+        const s = BASE_SPEED + (stage - 1) * 0.30;
+        resetBallToStart(s);
+      }
+
+      updateItems();
+
+      // stage clear
+      if (allBricksCleared()) {
+        nextStage();
+      }
+    }
+
+    /* =====================
+       🎨 DRAW (NEON)
+    ===================== */
+    function drawNeonRect(x, y, w, h, color, blur = 12) {
+      ctx.save();
+      ctx.shadowColor = color;
+      ctx.shadowBlur = blur;
+      ctx.fillStyle = color;
+      ctx.fillRect(x, y, w, h);
+      ctx.restore();
+    }
+
+    function draw() {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+      // balls
+      for (const b of balls) {
+        ctx.save();
+        ctx.shadowColor = '#00e5ff';
+        ctx.shadowBlur = 16;
+        ctx.beginPath();
+        ctx.arc(b.x, b.y, b.r, 0, Math.PI * 2);
+        ctx.fillStyle = '#00e5ff';
+        ctx.fill();
+        ctx.restore();
+      }
+
+      // paddle
+      drawNeonRect(paddle.x, canvas.height - paddle.h, paddle.w, paddle.h, '#e0ffff', 10);
+
+      // bricks
+      for (const b of bricks) {
+        if (b.hp <= 0) continue;
+        const color = (b.hp >= 2) ? '#ff9800' : '#ff1744';
+        drawNeonRect(b.x, b.y, brickCfg.w, brickCfg.h, color, 12);
+      }
+
+      // items
+      for (const it of items) {
+        const c = it.type === 'expand' ? '#00ff99' : it.type === 'multi' ? '#29b6f6' : '#e040fb';
+        drawNeonRect(it.x - 6, it.y, 12, 12, c, 16);
+      }
+
+      // HUD
+      ctx.save();
+      ctx.fillStyle = '#0ff';
+      ctx.font = '14px Arial';
+      ctx.shadowColor = '#0ff';
+      ctx.shadowBlur = 6;
+      ctx.fillText(`SCORE: ${score}  LIFE: ${lives}  STAGE: ${stage}`, 10, 18);
+      ctx.fillText(`BEST: ${highScore}`, 360, 18);
+      if (speedBoostTimer > 0) ctx.fillText('SPEED UP!', 360, 36);
+      ctx.restore();
+
+      if (!running) {
+        // high score update (in case user refreshed mid-run and stopped)
+        saveHighScoreIfNeeded();
+        ctx.save();
+        ctx.fillStyle = '#8ff';
+        ctx.font = '18px Arial';
+        ctx.shadowColor = '#0ff';
+        ctx.shadowBlur = 10;
+        ctx.fillText('SPACE / 터치로 시작', 130, 160);
+        ctx.fillText(`HIGH SCORE: ${highScore}`, 145, 190);
+        ctx.restore();
+      }
+    }
+
+    function loop() {
+      update();
+      draw();
+      requestAnimationFrame(loop);
+    }
+
+    /* =====================
+       ✅ LIGHT TESTS (CONSOLE)
+       - 게임은 브라우저에서 돌아가므로,
+         최소한의 로직 테스트만 넣었습니다.
+    ===================== */
+    function runSelfTests() {
+      const assert = (cond, msg) => { if (!cond) throw new Error('TEST FAIL: ' + msg); };
+
+      assert(clamp(5, 0, 10) === 5, 'clamp within');
+      assert(clamp(-1, 0, 10) === 0, 'clamp low');
+      assert(clamp(999, 0, 10) === 10, 'clamp high');
+
+      bricks = [{hp:0},{hp:-1}];
+      assert(allBricksCleared() === true, 'allBricksCleared true');
+
+      bricks = [{hp:0},{hp:1}];
+      assert(allBricksCleared() === false, 'allBricksCleared false');
+
+      // ✅ stage patterns should create some bricks
+      const prevStage = stage;
+      for (const s of [1, 2, 3, 4, 5, 6]) {
+        stage = s;
+        initBricksForStage();
+        assert(bricks.length > 0, `bricks initialized at stage ${s}`);
+      }
+      stage = prevStage;
+
+      // ✅ nextStage should increase speed slightly
+      stage = 1;
+      resetBallToStart(BASE_SPEED);
+      const before = Math.hypot(balls[0].dx, balls[0].dy);
+      nextStage();
+      const after = Math.hypot(balls[0].dx, balls[0].dy);
+      assert(after > before, 'ball base speed increases after stage up');
+
+      console.log('[OK] Self tests passed');
+    }
+
+    // Initial state
+    runSelfTests();
+    initBricksForStage();
+    resetBallToStart(BASE_SPEED);
+    loop();
+  </script>
+</body>
+</html>
+
