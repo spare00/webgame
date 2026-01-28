@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<title>Web Game</title>
+<style>
+body{
+  background:#111;color:#fff;
+  font-family:system-ui,sans-serif;
+  display:flex;flex-direction:column;align-items:center;
+  margin-top:20px;
+}
+
+#top-ui {
+  display: flex;
+  gap: 14px;
+  padding: 14px 18px;
+  background: linear-gradient(180deg, #0b0f1a, #05070c);
+  border-bottom: 1px solid rgba(0, 255, 255, 0.15);
+  font-family: 'Orbitron', system-ui, sans-serif;
+}
+
+.nav-item a {
+  text-decoration: none;
+  color: #9ffcff;
+  padding: 8px 14px;
+  border-radius: 10px;
+  background: rgba(0, 255, 255, 0.06);
+  border: 1px solid rgba(0, 255, 255, 0.25);
+  box-shadow:
+    inset 0 0 10px rgba(0, 255, 255, 0.15),
+    0 0 6px rgba(0, 255, 255, 0.25);
+  transition: all 0.2s ease;
+}
+
+.nav-item a:hover {
+  color: #ffffff;
+  background: rgba(0, 255, 255, 0.18);
+  border-color: #5fffff;
+  box-shadow:
+    inset 0 0 14px rgba(0, 255, 255, 0.4),
+    0 0 12px rgba(0, 255, 255, 0.8);
+  transform: translateY(-1px);
+}
+
+.nav-item a:active {
+  transform: translateY(1px);
+  box-shadow:
+    inset 0 0 8px rgba(0, 255, 255, 0.6);
+}
+
+</style>
+</head>
+
+<body>
+
+<h2>Web Game</h2>
+<div id="top-ui">
+  <div class="nav-item"><a href="./galaga.html">Galaga</a></div>
+  <div class="nav-item"><a href="./tetris.html">Tetris</a></div>
+  <div class="nav-item"><a href="./tetris_2p.html">Tetris 2 Players</a></div>
+  <div class="nav-item"><a href="./fortress.html">Fortress</a></div>
+  <div class="nav-item"><a href="./omok.html">Omok</a></div>
+  <div class="nav-item"><a href="./block_breaker.html">Block Breaker</a></div>
+</div>
+
+</body>
+</html>
+
