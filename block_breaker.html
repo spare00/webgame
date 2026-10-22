@@ -5,38 +5,40 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>네온 벽돌부수기</title>
   <style>
-    body{
-      margin:0;
-      background:radial-gradient(circle at top,#121826,#000);
-      color:#0ff;
-      display:flex;
-      justify-content:center;
-      align-items:center;
-      min-height:100vh;
-      font-family:'Segoe UI',Arial,sans-serif;
-    }
-    #gameWrap{ text-align:center; }
+    *{box-sizing:border-box}
+    body{margin:0;min-height:100vh;padding:28px 16px;display:grid;place-items:center;background:radial-gradient(ellipse at 50% 8%,#15243a 0,#080d18 48%,#03050a 100%);color:#e7f7ff;font-family:Inter,'Segoe UI',Arial,sans-serif}
+    #gameWrap{width:min(960px,96vw);text-align:center}
+    header{margin-bottom:18px}
+    .eyebrow{margin:0 0 6px;color:#55e8ef;font-size:11px;font-weight:700;letter-spacing:.28em}
+    h1{margin:0;color:#f2fbff;font-size:clamp(24px,4vw,36px);letter-spacing:.08em;text-shadow:0 0 24px #00e5ff55}
+    .subtitle{margin:7px 0 0;color:#8ba5bd;font-size:13px;letter-spacing:.04em}
+    .gameFrame{padding:10px;border:1px solid #274058;border-radius:18px;background:linear-gradient(145deg,#101d2d,#09111e);box-shadow:0 24px 70px #0009,inset 0 1px #ffffff0b}
     canvas{
-      background:#020409;
-      border:2px solid #0ff;
-      box-shadow:0 0 20px #0ff,0 0 40px rgba(0,255,255,.25);
-      touch-action:none;
-      max-width:96vw;
+      display:block;
+      width:100%;
       height:auto;
+      border:1px solid #295169;
+      border-radius:11px;
+      background:#050a14;
+      box-shadow:0 0 35px #00d9ff12;
+      touch-action:none;
     }
     .info{
-      margin-top:8px;
-      font-size:14px;
-      color:#8ff;
-      text-shadow:0 0 6px #0ff;
-      opacity:.95;
+      display:flex;justify-content:center;gap:10px 24px;flex-wrap:wrap;margin-top:14px;color:#9cb2c8;font-size:12px;
     }
+    .info strong{color:#dffaff;font-weight:650}
+    @media(max-width:520px){body{padding:16px 8px}.gameFrame{padding:5px;border-radius:13px}.info{gap:8px 14px;font-size:11px}}
   </style>
 </head>
 <body>
   <div id="gameWrap">
-    <canvas id="game" width="640" height="400"></canvas>
-    <div class="info">← → / 터치 이동 | Space: 시작 · 재시작</div>
+    <header>
+      <p class="eyebrow">ARCADE · 01</p>
+      <h1>NEON BREAKER</h1>
+      <p class="subtitle">벽돌을 깨고, 아이템을 모아 다음 스테이지로</p>
+    </header>
+    <div class="gameFrame"><canvas id="game" width="640" height="400"></canvas></div>
+    <div class="info"><span><strong>← →</strong> 이동</span><span><strong>터치 / 드래그</strong> 패들 조작</span><span><strong>Space</strong> 시작 · 재시작</span></div>
   </div>
 
   <script>
@@ -79,7 +81,7 @@
       w: Math.round(canvas.width * 0.10),
       h: Math.round(canvas.height * 0.045),
       pad: Math.round(canvas.width * 0.015),
-      top: Math.round(canvas.height * 0.08),
+      top: Math.round(canvas.height * 0.14),
       left: Math.round(canvas.width * 0.05)
     };
 
@@ -87,6 +89,7 @@
        🧠 GAME STATE
     ===================== */
     let running = false;
+    let gameOver = false;
     let score = 0;
     let lives = 3;
     let stage = 1;
@@ -206,7 +209,7 @@
 
     canvas.addEventListener('touchmove', (e) => {
       const r = canvas.getBoundingClientRect();
-      const x = e.touches[0].clientX - r.left;
+      const x = (e.touches[0].clientX - r.left) * canvas.width / r.width;
       paddle.x = x - paddle.w / 2;
     }, { passive: true });
 
@@ -215,6 +218,7 @@
     ===================== */
     function startGame() {
       running = true;
+      gameOver = false;
       score = 0;
       lives = 3;
       stage = 1;
@@ -324,6 +328,8 @@
 
       // balls update
       for (const ball of balls) {
+        const previousX = ball.x;
+        const previousY = ball.y;
         ball.x += ball.dx * speedMul;
         ball.y += ball.dy * speedMul;
 
@@ -331,16 +337,28 @@
         if (ball.x < ball.r || ball.x > canvas.width - ball.r) ball.dx *= -1;
         if (ball.y < ball.r) ball.dy *= -1;
 
-        // paddle
-        if (
-          ball.y + ball.r > canvas.height - paddle.h &&
-          ball.x > paddle.x &&
-          ball.x < paddle.x + paddle.w
-        ) {
-          ball.dy *= -1;
-          // 살짝 튕김 위치에 따라 각도감
-          const hit = (ball.x - (paddle.x + paddle.w / 2)) / (paddle.w / 2);
-          ball.dx = clamp(ball.dx + hit * 0.5, -6, 6);
+        // Circle vs paddle rectangle, resolving the side that was hit.
+        const paddleTop = canvas.height - paddle.h;
+        const closestX = clamp(ball.x, paddle.x, paddle.x + paddle.w);
+        const closestY = clamp(ball.y, paddleTop, canvas.height);
+        const overlapX = ball.x - closestX;
+        const overlapY = ball.y - closestY;
+        if (overlapX * overlapX + overlapY * overlapY <= ball.r * ball.r) {
+          if (previousY + ball.r <= paddleTop && ball.dy > 0) {
+            ball.y = paddleTop - ball.r;
+            ball.dy = -Math.abs(ball.dy);
+            const hit = (ball.x - (paddle.x + paddle.w / 2)) / (paddle.w / 2);
+            ball.dx = clamp(ball.dx + hit * 0.5, -6, 6);
+          } else if (previousX < paddle.x && ball.dx > 0) {
+            ball.x = paddle.x - ball.r;
+            ball.dx = -Math.abs(ball.dx);
+          } else if (previousX > paddle.x + paddle.w && ball.dx < 0) {
+            ball.x = paddle.x + paddle.w + ball.r;
+            ball.dx = Math.abs(ball.dx);
+          } else {
+            ball.y = paddleTop - ball.r;
+            ball.dy = -Math.abs(ball.dy);
+          }
           beep(500, 0.04, 0.05, 'square');
         }
 
@@ -359,6 +377,7 @@
 
         if (lives <= 0) {
           running = false;
+          gameOver = true;
           saveHighScoreIfNeeded();
           return;
         }
@@ -383,12 +402,57 @@
       ctx.shadowColor = color;
       ctx.shadowBlur = blur;
       ctx.fillStyle = color;
-      ctx.fillRect(x, y, w, h);
+      ctx.beginPath();
+      ctx.roundRect(x, y, w, h, Math.min(5, h / 2));
+      ctx.fill();
+      ctx.restore();
+    }
+
+    function drawBackground() {
+      const bg = ctx.createLinearGradient(0, 0, 0, canvas.height);
+      bg.addColorStop(0, '#0c1727');
+      bg.addColorStop(0.55, '#07101c');
+      bg.addColorStop(1, '#050913');
+      ctx.fillStyle = bg;
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      ctx.save();
+      ctx.strokeStyle = 'rgba(100,180,220,.055)';
+      ctx.lineWidth = 1;
+      for (let y = 54; y < canvas.height; y += 32) {
+        ctx.beginPath(); ctx.moveTo(0, y + .5); ctx.lineTo(canvas.width, y + .5); ctx.stroke();
+      }
+      ctx.fillStyle = 'rgba(150,220,255,.16)';
+      for (let x = 18; x < canvas.width; x += 43) {
+        for (let y = 57; y < canvas.height; y += 32) ctx.fillRect(x, y, 1, 1);
+      }
+      ctx.restore();
+    }
+
+    function drawBrick(b) {
+      const x = b.x, y = b.y, w = brickCfg.w, h = brickCfg.h;
+      const top = b.hp >= 2 ? '#ffc05d' : '#ff718e';
+      const bottom = b.hp >= 2 ? '#e26a27' : '#d93365';
+      const gradient = ctx.createLinearGradient(x, y, x, y + h);
+      gradient.addColorStop(0, top);
+      gradient.addColorStop(1, bottom);
+      ctx.save();
+      ctx.shadowColor = bottom;
+      ctx.shadowBlur = 9;
+      ctx.fillStyle = gradient;
+      ctx.beginPath(); ctx.roundRect(x, y, w, h, 5); ctx.fill();
+      ctx.shadowBlur = 0;
+      ctx.fillStyle = 'rgba(255,255,255,.24)';
+      ctx.beginPath(); ctx.roundRect(x + 3, y + 2, w - 6, 2, 1); ctx.fill();
+      if (b.hp >= 2) {
+        ctx.strokeStyle = 'rgba(255,246,204,.72)';
+        ctx.lineWidth = 1;
+        ctx.beginPath(); ctx.roundRect(x + 3, y + 3, w - 6, h - 6, 3); ctx.stroke();
+      }
       ctx.restore();
     }
 
     function draw() {
-      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      drawBackground();
 
       // balls
       for (const b of balls) {
@@ -397,48 +461,83 @@
         ctx.shadowBlur = 16;
         ctx.beginPath();
         ctx.arc(b.x, b.y, b.r, 0, Math.PI * 2);
-        ctx.fillStyle = '#00e5ff';
+        const ballGlow = ctx.createRadialGradient(b.x - 2, b.y - 2, 1, b.x, b.y, b.r + 2);
+        ballGlow.addColorStop(0, '#ffffff');
+        ballGlow.addColorStop(.35, '#a9ffff');
+        ballGlow.addColorStop(1, '#00a9c8');
+        ctx.fillStyle = ballGlow;
         ctx.fill();
         ctx.restore();
       }
 
       // paddle
-      drawNeonRect(paddle.x, canvas.height - paddle.h, paddle.w, paddle.h, '#e0ffff', 10);
+      const paddleY = canvas.height - paddle.h;
+      const paddleGradient = ctx.createLinearGradient(0, paddleY, 0, paddleY + paddle.h);
+      paddleGradient.addColorStop(0, '#f2ffff');
+      paddleGradient.addColorStop(.35, '#57eaff');
+      paddleGradient.addColorStop(1, '#1486b5');
+      ctx.save();
+      ctx.shadowColor = '#31deff'; ctx.shadowBlur = 16;
+      ctx.fillStyle = paddleGradient;
+      ctx.beginPath(); ctx.roundRect(paddle.x, paddleY, paddle.w, paddle.h, 7); ctx.fill();
+      ctx.restore();
 
       // bricks
       for (const b of bricks) {
         if (b.hp <= 0) continue;
-        const color = (b.hp >= 2) ? '#ff9800' : '#ff1744';
-        drawNeonRect(b.x, b.y, brickCfg.w, brickCfg.h, color, 12);
+        drawBrick(b);
       }
 
       // items
       for (const it of items) {
         const c = it.type === 'expand' ? '#00ff99' : it.type === 'multi' ? '#29b6f6' : '#e040fb';
-        drawNeonRect(it.x - 6, it.y, 12, 12, c, 16);
+        drawNeonRect(it.x - 7, it.y, 14, 14, c, 13);
+        ctx.fillStyle = '#06111b';
+        ctx.font = 'bold 10px Arial';
+        ctx.textAlign = 'center';
+        ctx.fillText(it.type === 'expand' ? 'W' : it.type === 'multi' ? '+' : '»', it.x, it.y + 10);
       }
 
       // HUD
       ctx.save();
-      ctx.fillStyle = '#0ff';
-      ctx.font = '14px Arial';
+      ctx.fillStyle = 'rgba(5,12,22,.88)';
+      ctx.fillRect(0, 0, canvas.width, 43);
+      ctx.strokeStyle = 'rgba(95,218,244,.18)';
+      ctx.beginPath(); ctx.moveTo(0, 43.5); ctx.lineTo(canvas.width, 43.5); ctx.stroke();
+      ctx.fillStyle = '#bdfaff';
+      ctx.font = 'bold 13px Arial';
       ctx.shadowColor = '#0ff';
-      ctx.shadowBlur = 6;
-      ctx.fillText(`SCORE: ${score}  LIFE: ${lives}  STAGE: ${stage}`, 10, 18);
-      ctx.fillText(`BEST: ${highScore}`, 360, 18);
-      if (speedBoostTimer > 0) ctx.fillText('SPEED UP!', 360, 36);
+      ctx.shadowBlur = 5;
+      ctx.fillText(`SCORE  ${score}`, 16, 19);
+      ctx.fillText(`LIFE  ${lives}`, 16, 36);
+      ctx.textAlign = 'center';
+      ctx.fillText(`STAGE  ${stage}`, canvas.width / 2, 27);
+      ctx.textAlign = 'right';
+      ctx.fillText(`BEST  ${highScore}`, canvas.width - 16, 19);
+      if (speedBoostTimer > 0) ctx.fillText('SPEED UP', canvas.width - 16, 36);
+      ctx.textAlign = 'left';
       ctx.restore();
 
       if (!running) {
         // high score update (in case user refreshed mid-run and stopped)
         saveHighScoreIfNeeded();
         ctx.save();
-        ctx.fillStyle = '#8ff';
-        ctx.font = '18px Arial';
-        ctx.shadowColor = '#0ff';
-        ctx.shadowBlur = 10;
-        ctx.fillText('SPACE / 터치로 시작', 130, 160);
-        ctx.fillText(`HIGH SCORE: ${highScore}`, 145, 190);
+        ctx.fillStyle = 'rgba(2,7,15,.76)';
+        ctx.fillRect(0, 43, canvas.width, canvas.height - 43);
+        ctx.textAlign = 'center';
+        ctx.fillStyle = '#f1fcff';
+        ctx.font = 'bold 25px Arial';
+        ctx.shadowColor = '#00d9ff';
+        ctx.shadowBlur = 16;
+        ctx.fillText(gameOver ? 'GAME OVER' : 'READY?', canvas.width / 2, 176);
+        ctx.font = '15px Arial';
+        ctx.shadowBlur = 8;
+        ctx.fillStyle = '#77f4ff';
+        ctx.fillText('SPACE / 터치로 시작', canvas.width / 2, 210);
+        ctx.font = '12px Arial';
+        ctx.fillStyle = '#a6bbce';
+        ctx.fillText(`HIGH SCORE  ${highScore}`, canvas.width / 2, 237);
+        ctx.textAlign = 'left';
         ctx.restore();
       }
     }
