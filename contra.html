@@ -1,0 +1,404 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<title>8bit Car Run & Gun</title>
+<style>
+  body {
+    margin: 0;
+    background: #000;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    flex-direction: column;
+    height: 100vh;
+    overflow: hidden;
+  }
+  canvas {
+    border: 3px solid #00ff00;
+    image-rendering: pixelated;
+  }
+  #controls {
+    color: #fff;
+    font: 14px monospace;
+    margin-top: 10px;
+  }
+</style>
+</head>
+<body>
+
+<canvas id="game" width="800" height="400"></canvas>
+<div id="controls">MOVE: ← → &nbsp; JUMP: ↑ &nbsp; SHOOT: SPACE</div>
+
+<script>
+/* =====================
+   BASIC SETUP
+===================== */
+const canvas = document.getElementById("game");
+const ctx = canvas.getContext("2d");
+ctx.imageSmoothingEnabled = false;
+
+const keys = {};
+window.addEventListener("keydown", e => {
+  keys[e.code] = true;
+  startAudio();
+  if (e.code === "Space" || e.code === "ArrowUp") e.preventDefault();
+});
+window.addEventListener("keyup", e => keys[e.code] = false);
+
+const GRAVITY = 0.6;
+const BG_SPEED = 2;
+const SHOOT_INTERVAL = 24;
+const STAGE_DURATION = 30000;
+let gameTime = 0;
+let stage = 1;
+let lastFrameTime = null;
+let audioContext;
+let bgmTimer;
+let bgmNote = 0;
+
+function playTone(frequency, duration, type, volume) {
+  if (!audioContext || !frequency) return;
+  const oscillator = audioContext.createOscillator();
+  const gain = audioContext.createGain();
+  const now = audioContext.currentTime;
+  oscillator.type = type;
+  oscillator.frequency.setValueAtTime(frequency, now);
+  gain.gain.setValueAtTime(volume, now);
+  gain.gain.exponentialRampToValueAtTime(0.001, now + duration);
+  oscillator.connect(gain).connect(audioContext.destination);
+  oscillator.start(now);
+  oscillator.stop(now + duration);
+}
+
+function startAudio() {
+  if (audioContext) return;
+  const AudioContext = window.AudioContext || window.webkitAudioContext;
+  if (!AudioContext) return;
+  audioContext = new AudioContext();
+  startBgm();
+}
+
+function startBgm() {
+  if (!audioContext || bgmTimer) return;
+  const melody = [392, 0, 523, 0, 659, 523, 440, 0, 392, 0, 330, 0, 440, 523, 392, 0];
+  const playNextNote = () => {
+    playTone(melody[bgmNote], 0.18, "square", 0.025);
+    bgmNote = (bgmNote + 1) % melody.length;
+  };
+  playNextNote();
+  bgmTimer = setInterval(playNextNote, 220);
+}
+
+function stopBgm() {
+  clearInterval(bgmTimer);
+  bgmTimer = null;
+}
+
+function playExplosion() {
+  if (!audioContext) return;
+  const oscillator = audioContext.createOscillator();
+  const gain = audioContext.createGain();
+  const now = audioContext.currentTime;
+  oscillator.type = "sawtooth";
+  oscillator.frequency.setValueAtTime(160, now);
+  oscillator.frequency.exponentialRampToValueAtTime(35, now + 0.22);
+  gain.gain.setValueAtTime(0.07, now);
+  gain.gain.exponentialRampToValueAtTime(0.001, now + 0.22);
+  oscillator.connect(gain).connect(audioContext.destination);
+  oscillator.start(now);
+  oscillator.stop(now + 0.22);
+}
+
+/* =====================
+   PLAYER (CAR)
+===================== */
+const player = {
+  x: 350,
+  y: 300,
+  w: 28,
+  h: 18,
+  vy: 0,
+  speed: 4,
+  onGround: false,
+  life: 3,
+  shootCooldown: 0
+};
+
+/* =====================
+   BULLETS & ENEMIES
+===================== */
+let bullets = [];
+let enemies = [];
+let airEnemies = [];
+let score = 0;
+let highScore = Number(localStorage.getItem("contraHighScore") || 0);
+
+/* =====================
+   BACKGROUND (TREES)
+===================== */
+let trees = [];
+for (let i = 0; i < 8; i++) {
+  trees.push({
+    x: Math.random() * canvas.width,
+    w: 12,
+    h: 40 + Math.random() * 30
+  });
+}
+
+/* =====================
+   ENEMY SPAWN
+===================== */
+function spawnGroundEnemy() {
+  enemies.push({
+    x: canvas.width + Math.random() * 200,
+    y: 300,
+    w: 26,
+    h: 16,
+    alive: true
+  });
+}
+
+function spawnAirEnemy() {
+  airEnemies.push({
+    x: canvas.width + Math.random() * 200,
+    y: 80 + Math.random() * 80,
+    w: 24,
+    h: 14,
+    alive: true
+  });
+}
+
+/* =====================
+   SHOOT (RIGHT + UP)
+===================== */
+function shoot() {
+  playTone(880, 0.07, "square", 0.04);
+  const sx = player.x + player.w;
+  const sy = player.y + player.h / 2;
+
+  bullets.push({ x: sx, y: sy, dx: 1, dy: 0 });
+  bullets.push({ x: sx, y: sy, dx: 0, dy: -1 });
+}
+
+/* =====================
+   UPDATE
+===================== */
+function update(deltaTime) {
+  gameTime += deltaTime;
+  stage = Math.floor(gameTime / STAGE_DURATION) + 1;
+
+  /* PLAYER MOVE */
+  if (keys["ArrowLeft"])  player.x -= player.speed;
+  if (keys["ArrowRight"]) player.x += player.speed;
+
+  player.x = Math.max(0, Math.min(canvas.width - player.w, player.x));
+
+  /* JUMP */
+  if (keys["ArrowUp"] && player.onGround) {
+    player.vy = -11;
+    player.onGround = false;
+  }
+
+  player.vy += GRAVITY;
+  player.y += player.vy;
+
+  if (player.y >= 300) {
+    player.y = 300;
+    player.vy = 0;
+    player.onGround = true;
+  }
+
+  /* SHOOT */
+  if (keys["Space"] && player.shootCooldown <= 0) {
+    shoot();
+    player.shootCooldown = SHOOT_INTERVAL;
+  }
+  player.shootCooldown--;
+
+  /* BULLETS */
+  bullets.forEach(b => {
+    b.x += b.dx * 6;
+    b.y += b.dy * 6;
+  });
+  bullets = bullets.filter(b =>
+    b.x < canvas.width && b.y > -10 && b.y < canvas.height
+  );
+
+  /* BACKGROUND MOVE */
+  trees.forEach(t => {
+    t.x -= BG_SPEED * 1.5;
+    if (t.x + t.w < 0) {
+      t.x = canvas.width + Math.random() * 100;
+      t.h = 40 + Math.random() * 30;
+    }
+  });
+
+  /* ENEMIES MOVE */
+  const stageSpeed = Math.min(stage - 1, 5);
+  enemies.forEach(e => e.x -= BG_SPEED + 1 + stageSpeed);
+  airEnemies.forEach(e => e.x -= BG_SPEED + 2 + stageSpeed);
+
+  enemies = enemies.filter(e => e.alive && e.x + e.w > 0);
+  airEnemies = airEnemies.filter(e => e.alive && e.x + e.w > 0);
+
+  /* COLLISION */
+  bullets = bullets.filter(b => {
+    const groundHit = enemies.find(e => e.alive && hit(b, 4, 4, e));
+    if (groundHit) {
+      groundHit.alive = false;
+      score += 100;
+      playExplosion();
+      return false;
+    }
+    const airHit = airEnemies.find(e => e.alive && hit(b, 4, 4, e));
+    if (airHit) {
+      airHit.alive = false;
+      score += 200;
+      playExplosion();
+      return false;
+    }
+    return true;
+  });
+
+  if (score > highScore) {
+    highScore = score;
+    localStorage.setItem("contraHighScore", highScore);
+  }
+
+  enemies.forEach(e => {
+    if (e.alive && hit(player, player.w, player.h, e)) {
+      e.alive = false;
+      player.life--;
+      playExplosion();
+    }
+  });
+
+  /* SPAWN */
+  if (Math.random() < Math.min(0.02 + (stage - 1) * 0.005, 0.08)) spawnGroundEnemy();
+  if (Math.random() < Math.min(0.015 + (stage - 1) * 0.004, 0.06)) spawnAirEnemy();
+}
+
+/* =====================
+   COLLISION
+===================== */
+function hit(a, aw, ah, b) {
+  return (
+    a.x < b.x + b.w &&
+    a.x + aw > b.x &&
+    a.y < b.y + b.h &&
+    a.y + ah > b.y
+  );
+}
+
+function restartGame() {
+  player.x = 350;
+  player.y = 300;
+  player.vy = 0;
+  player.onGround = false;
+  player.life = 3;
+  player.shootCooldown = 0;
+  gameTime = 0;
+  stage = 1;
+  lastFrameTime = null;
+  bullets = [];
+  enemies = [];
+  airEnemies = [];
+  score = 0;
+  startAudio();
+  startBgm();
+  requestAnimationFrame(loop);
+}
+
+const restartButton = { x: 315, y: 245, w: 170, h: 42 };
+canvas.addEventListener("pointerdown", startAudio);
+canvas.addEventListener("click", event => {
+  const rect = canvas.getBoundingClientRect();
+  const x = (event.clientX - rect.left) * canvas.width / rect.width;
+  const y = (event.clientY - rect.top) * canvas.height / rect.height;
+  if (player.life <= 0 && x >= restartButton.x && x <= restartButton.x + restartButton.w && y >= restartButton.y && y <= restartButton.y + restartButton.h) restartGame();
+});
+window.addEventListener("keydown", event => {
+  if (event.code === "KeyR" && player.life <= 0) restartGame();
+});
+
+/* =====================
+   DRAW
+===================== */
+function draw() {
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+  /* SKY */
+  ctx.fillStyle = "#111";
+  ctx.fillRect(0, 0, canvas.width, 300);
+
+  /* TREES */
+  ctx.fillStyle = "#0a0";
+  trees.forEach(t => {
+    ctx.fillRect(t.x, 300 - t.h, t.w, t.h);
+  });
+
+  /* GROUND */
+  ctx.fillStyle = "#333";
+  ctx.fillRect(0, 318, canvas.width, 82);
+
+  /* PLAYER */
+  ctx.fillStyle = "#00ff00";
+  ctx.fillRect(player.x, player.y, player.w, player.h);
+
+  ctx.fillStyle = "#000";
+  ctx.fillRect(player.x + 4, player.y + 14, 6, 4);
+  ctx.fillRect(player.x + 18, player.y + 14, 6, 4);
+
+  /* BULLETS */
+  ctx.fillStyle = "#ffff00";
+  bullets.forEach(b => ctx.fillRect(b.x, b.y, 4, 4));
+
+  /* ENEMIES */
+  ctx.fillStyle = "#ff0000";
+  enemies.forEach(e => ctx.fillRect(e.x, e.y, e.w, e.h));
+
+  ctx.fillStyle = "#00ffff";
+  airEnemies.forEach(e => ctx.fillRect(e.x, e.y, e.w, e.h));
+
+  /* UI */
+  ctx.fillStyle = "#fff";
+  ctx.font = "14px monospace";
+  ctx.fillText("SCORE: " + String(score).padStart(6, "0"), 10, 20);
+  ctx.fillText("HI: " + String(highScore).padStart(6, "0"), 300, 20);
+  ctx.fillText("STAGE: " + stage, 600, 20);
+  ctx.fillText("LIFE : " + player.life, 10, 40);
+}
+
+/* =====================
+   LOOP
+===================== */
+function loop(timestamp) {
+  if (player.life > 0) {
+    const deltaTime = lastFrameTime === null ? 0 : timestamp - lastFrameTime;
+    lastFrameTime = timestamp;
+    update(deltaTime);
+    draw();
+    requestAnimationFrame(loop);
+  } else {
+    stopBgm();
+    draw();
+    ctx.fillStyle = "#fff";
+    ctx.font = "30px monospace";
+    ctx.fillText("GAME OVER", 280, 200);
+    ctx.font = "18px monospace";
+    ctx.fillText("FINAL SCORE: " + score, 285, 230);
+    ctx.fillStyle = "#00aa00";
+    ctx.fillRect(restartButton.x, restartButton.y, restartButton.w, restartButton.h);
+    ctx.fillStyle = "#fff";
+    ctx.font = "18px monospace";
+    ctx.fillText("RESTART (R)", restartButton.x + 14, restartButton.y + 27);
+  }
+}
+
+requestAnimationFrame(loop);
+</script>
+
+</body>
+</html>
+
