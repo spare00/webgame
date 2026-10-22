@@ -5,17 +5,20 @@ const HEIGHT = 620;
 const GROUND_BASE = 430;
 const TANK_HEIGHT = 8;
 const MAX_MOVE = 40;
-const MAX_SLOPE = 6;
+const MAX_CLIMB_PER_MOVE = 3;
 const GRAVITY = 0.15;
 const DAMAGE = 1.3;
 const COLORS = [0xff6078, 0x68a6ff] as const;
-type Player = { x: number; y: number; angle: number; power: number; hp: number; alive: boolean; move: number };
+type Player = { x: number; y: number; vy: number; angle: number; power: number; hp: number; alive: boolean; move: number };
 type Projectile = { x: number; y: number; vx: number; vy: number; trail: { x: number; y: number }[] };
 type Blast = { x: number; y: number; radius: number; life: number; maxLife: number };
 
 class FortressScene extends Phaser.Scene {
+  private backdrop!: Phaser.GameObjects.Graphics;
   private graphics!: Phaser.GameObjects.Graphics;
-  private terrain: number[] = [];
+  private terrainTexture!: Phaser.Textures.CanvasTexture;
+  private terrainSurface: number[] = [];
+  private terrainSolid = new Uint8Array(WIDTH * HEIGHT);
   private players: [Player, Player] = [this.newPlayer(120, 45), this.newPlayer(920, 135)];
   private current = 0;
   private wind = 0;
@@ -37,7 +40,12 @@ class FortressScene extends Phaser.Scene {
   constructor() { super("Fortress"); }
 
   create(): void {
+    this.backdrop = this.add.graphics();
     this.graphics = this.add.graphics();
+    if (this.textures.exists("fortress-ground")) this.textures.remove("fortress-ground");
+    this.terrainTexture = this.textures.createCanvas("fortress-ground", WIDTH, HEIGHT)!;
+    this.add.image(0, 0, "fortress-ground").setOrigin(0).setDepth(1);
+    this.graphics.setDepth(2);
     this.stars = Array.from({ length: 55 }, () => ({ x: Math.random() * WIDTH, y: 125 + Math.random() * 240, alpha: 0.25 + Math.random() * 0.5 }));
     this.hud = [
       this.add.text(40, 34, "", this.textStyle(17, "#ff6078")),
@@ -81,7 +89,7 @@ class FortressScene extends Phaser.Scene {
         shot.vy += GRAVITY;
         shot.trail.push({ x: shot.x, y: shot.y });
         if (shot.trail.length > 12) shot.trail.shift();
-        if (shot.x < 0 || shot.x >= WIDTH || shot.y >= this.terrain[Math.max(0, Math.min(WIDTH - 1, Math.floor(shot.x)))]) {
+        if (shot.x < 0 || shot.x >= WIDTH || this.isSolid(shot.x, shot.y)) {
           this.explode(shot.x, Math.min(HEIGHT - 24, shot.y));
           break;
         }
@@ -91,11 +99,12 @@ class FortressScene extends Phaser.Scene {
       this.blast.life -= delta;
       if (this.blast.life <= 0) this.blast = null;
     }
+    this.updateTanks(delta);
     this.draw();
   }
 
   private newPlayer(x: number, angle: number): Player {
-    return { x, y: 0, angle, power: 9, hp: 100, alive: true, move: MAX_MOVE };
+    return { x, y: 0, vy: 0, angle, power: 9, hp: 100, alive: true, move: MAX_MOVE };
   }
 
   private resetGame(): void {
@@ -112,8 +121,13 @@ class FortressScene extends Phaser.Scene {
     this.projectile = null;
     this.blast = null;
     this.players = [this.newPlayer(120, 45), this.newPlayer(WIDTH - 120, 135)];
-    this.terrain = Array.from({ length: WIDTH }, (_, x) => GROUND_BASE + Math.sin(x * 0.009) * 32 + Math.sin(x * 0.023) * 12);
-    this.players.forEach((player) => { player.y = this.groundAt(player.x) - 2; });
+    this.terrainSurface = Array.from({ length: WIDTH }, (_, x) => Math.floor(GROUND_BASE + Math.sin(x * 0.009) * 32 + Math.sin(x * 0.023) * 12));
+    this.terrainSolid.fill(0);
+    this.terrainSurface.forEach((surface, x) => {
+      for (let y = surface; y < HEIGHT; y++) this.terrainSolid[y * WIDTH + x] = 1;
+    });
+    this.paintTerrain();
+    this.players.forEach((player) => { player.y = this.tankFloorAt(player.x); });
     this.newTurn();
   }
 
@@ -147,12 +161,15 @@ class FortressScene extends Phaser.Scene {
   private movePlayer(dx: number): void {
     const player = this.players[this.current];
     if (player.move <= 0) return;
-    const nextX = Math.floor(Phaser.Math.Clamp(player.x + dx, 8, WIDTH - 8));
-    if (Math.abs(this.groundAt(nextX) - this.groundAt(Math.floor(player.x))) > MAX_SLOPE) return;
+    const nextX = Phaser.Math.Clamp(player.x + dx, 20, WIDTH - 20);
     const other = this.players[1 - this.current];
-    if (other.alive && Math.abs(nextX - other.x) < 24) return;
+    if (other.alive && Math.abs(nextX - other.x) < 36) return;
+    let nextY = player.y;
+    while (nextY > player.y - MAX_CLIMB_PER_MOVE && !this.tankFits(nextX, nextY)) nextY--;
+    if (!this.tankFits(nextX, nextY)) return;
     player.x = nextX;
-    player.y = this.groundAt(nextX) - 2;
+    player.y = nextY;
+    player.vy = 0;
     player.move -= Math.abs(dx);
   }
 
@@ -175,15 +192,11 @@ class FortressScene extends Phaser.Scene {
     const blastRadius = 28;
     this.playTone(110, 0.4, 0.13);
     this.blast = { x, y, radius: blastRadius, life: 320, maxLife: 320 };
-    const centerX = Phaser.Math.Clamp(Math.floor(x), 0, WIDTH - 1);
-    for (let tx = Math.max(0, centerX - blastRadius); tx < Math.min(WIDTH, centerX + blastRadius); tx++) {
-      this.terrain[tx] = Math.max(this.terrain[tx], y + Math.sqrt(blastRadius ** 2 - (tx - x) ** 2));
-    }
+    this.clearSoil(x, y, blastRadius);
     this.players.forEach((player, index) => {
       if (!player.alive) return;
       const distance = Phaser.Math.Distance.Between(player.x, player.y, x, y);
       if (distance < blastRadius) player.hp = Math.max(0, player.hp - Math.floor((blastRadius - distance) * 2 * DAMAGE));
-      player.y = this.groundAt(player.x) - 2;
       if (player.hp === 0) this.killPlayer(index);
     });
     this.projectile = null;
@@ -210,20 +223,121 @@ class FortressScene extends Phaser.Scene {
     });
   }
 
-  private groundAt(x: number): number { return this.terrain[Phaser.Math.Clamp(Math.floor(x), 0, WIDTH - 1)] ?? GROUND_BASE; }
+  private groundAt(x: number): number { return this.terrainSurface[Phaser.Math.Clamp(Math.floor(x), 0, WIDTH - 1)] ?? GROUND_BASE; }
+
+  private tankFloorAt(x: number): number {
+    let floor = HEIGHT;
+    for (let tx = Math.max(0, Math.floor(x - 17)); tx <= Math.min(WIDTH - 1, Math.ceil(x + 17)); tx++) {
+      floor = Math.min(floor, this.groundAt(tx));
+    }
+    return floor;
+  }
+
+  private tankFits(x: number, feet: number): boolean {
+    const left = Math.floor(x - 17);
+    const right = Math.ceil(x + 17);
+    const top = Math.floor(feet - 15);
+    const bottom = Math.floor(feet - 1);
+    for (let y = top; y <= bottom; y++) {
+      for (let tx = left; tx <= right; tx++) {
+        if (this.isSolid(tx, y)) return false;
+      }
+    }
+    return !this.isSolid(right, bottom) && !this.isSolid(left, bottom);
+  }
+
+  private updateTanks(delta: number): void {
+    const frames = delta / 16.667;
+    for (const player of this.players) {
+      if (!player.alive) continue;
+      player.vy = Math.min(8, player.vy + 0.34 * frames);
+      let remaining = player.vy * frames;
+      while (remaining > 0) {
+        const step = Math.min(1, remaining);
+        if (!this.tankFits(player.x, player.y + step)) {
+          player.vy = 0;
+          break;
+        }
+        player.y += step;
+        remaining -= step;
+      }
+      if (player.y > HEIGHT + 20) {
+        player.alive = false;
+        player.hp = 0;
+        this.winner = this.players.indexOf(player) === 0 ? 1 : 0;
+        this.gameOverPending = true;
+        this.endTimer = this.time.delayedCall(650, () => {
+          this.gameOver = true;
+          this.restartButton.setVisible(true);
+          this.restartLabel.setVisible(true);
+          this.gameOverTitle.setText(`PLAYER ${this.winner + 1} WINS`).setVisible(true);
+          this.gameOverSubtitle.setVisible(true);
+        });
+      }
+    }
+  }
+
+  private isSolid(x: number, y: number): boolean {
+    const ix = Math.floor(x);
+    const iy = Math.floor(y);
+    return ix >= 0 && ix < WIDTH && (iy >= HEIGHT || (iy >= 0 && this.terrainSolid[iy * WIDTH + ix] === 1));
+  }
+
+  private clearSoil(x: number, y: number, radius: number): void {
+    const left = Math.max(0, Math.floor(x - radius));
+    const right = Math.min(WIDTH - 1, Math.ceil(x + radius));
+    const top = Math.max(0, Math.floor(y - radius));
+    const bottom = Math.min(HEIGHT - 1, Math.ceil(y + radius));
+    for (let py = top; py <= bottom; py++) {
+      for (let px = left; px <= right; px++) {
+        if ((px - x) ** 2 + (py - y) ** 2 <= radius ** 2) this.terrainSolid[py * WIDTH + px] = 0;
+      }
+    }
+    for (let px = left; px <= right; px++) {
+      for (let py = 0; py < HEIGHT; py++) {
+        if (this.terrainSolid[py * WIDTH + px]) { this.terrainSurface[px] = py; break; }
+      }
+    }
+    const context = this.terrainTexture.context;
+    context.save();
+    context.globalCompositeOperation = "destination-out";
+    context.beginPath();
+    context.arc(x, y, radius, 0, Math.PI * 2);
+    context.fill();
+    context.restore();
+    this.terrainTexture.refresh();
+  }
+
+  private paintTerrain(): void {
+    const context = this.terrainTexture.context;
+    context.clearRect(0, 0, WIDTH, HEIGHT);
+    context.beginPath();
+    context.moveTo(0, HEIGHT);
+    this.terrainSurface.forEach((surface, x) => context.lineTo(x, surface));
+    context.lineTo(WIDTH, HEIGHT);
+    context.closePath();
+    const fill = context.createLinearGradient(0, GROUND_BASE - 50, 0, HEIGHT);
+    fill.addColorStop(0, "#315e48");
+    fill.addColorStop(0.14, "#294a3e");
+    fill.addColorStop(1, "#172b2c");
+    context.fillStyle = fill;
+    context.fill();
+    this.terrainTexture.refresh();
+  }
 
   private draw(): void {
+    const backdrop = this.backdrop;
     const g = this.graphics;
+    backdrop.clear();
     g.clear();
-    g.fillStyle(0x0c1728).fillRect(0, 0, WIDTH, HEIGHT);
-    g.fillStyle(0x111f33).fillRoundedRect(16, 16, WIDTH - 32, HEIGHT - 32, 10);
-    this.stars.forEach((star) => g.fillStyle(0xb6d3ff, star.alpha).fillCircle(star.x, star.y, 1.4));
+    backdrop.fillStyle(0x0c1728).fillRect(0, 0, WIDTH, HEIGHT);
+    backdrop.fillStyle(0x111f33).fillRoundedRect(16, 16, WIDTH - 32, HEIGHT - 32, 10);
+    this.stars.forEach((star) => backdrop.fillStyle(0xb6d3ff, star.alpha).fillCircle(star.x, star.y, 1.4));
 
     // Muted dashed center guide separates the two player positions.
-    for (let y = 145; y < HEIGHT - 55; y += 15) g.fillStyle(0x8ca1c0, 0.23).fillCircle(WIDTH / 2, y, 1.4);
-    g.fillStyle(0x192a41).fillRect(24, 112, WIDTH - 48, 1);
+    for (let y = 145; y < HEIGHT - 55; y += 15) backdrop.fillStyle(0x8ca1c0, 0.23).fillCircle(WIDTH / 2, y, 1.4);
+    backdrop.fillStyle(0x192a41).fillRect(24, 112, WIDTH - 48, 1);
 
-    this.drawTerrain();
     this.drawTrajectory();
     this.players.forEach((player, index) => this.drawTank(player, index));
     if (this.projectile) {
@@ -233,19 +347,6 @@ class FortressScene extends Phaser.Scene {
     this.drawBlast();
     this.drawHud();
     if (this.gameOver) this.drawGameOver();
-  }
-
-  private drawTerrain(): void {
-    const g = this.graphics;
-    g.beginPath().moveTo(0, HEIGHT);
-    this.terrain.forEach((height, x) => g.lineTo(x, height));
-    g.lineTo(WIDTH, HEIGHT).closePath();
-    g.fillStyle(0x1b382f).fillPath();
-    g.beginPath().moveTo(0, this.terrain[0]);
-    this.terrain.forEach((height, x) => g.lineTo(x, height));
-    g.lineStyle(3, 0x79d58d, 1).strokePath();
-    g.lineStyle(1, 0x315c48, 0.75);
-    for (let x = 0; x < WIDTH; x += 16) g.lineBetween(x, this.groundAt(x) + 8, x + 6, this.groundAt(x) + 13);
   }
 
   private drawTank(player: Player, index: number): void {
@@ -274,7 +375,7 @@ class FortressScene extends Phaser.Scene {
       y += vy;
       vy += GRAVITY;
       if (i % 2 === 0) this.graphics.fillStyle(COLORS[this.current], 0.15 + 0.25 * (1 - i / 34)).fillCircle(x, y, 2);
-      if (x < 0 || x >= WIDTH || y > this.groundAt(x)) break;
+      if (x < 0 || x >= WIDTH || this.isSolid(x, y)) break;
     }
   }
 
