@@ -31,6 +31,13 @@
 
     const canvas = document.getElementById('game');
     const ctx = canvas.getContext('2d');
+    const stars = Array.from({ length: 110 }, () => ({
+      x: Math.random() * canvas.width,
+      y: Math.random() * canvas.height,
+      size: 0.5 + Math.random() * 1.4,
+      speed: 14 + Math.random() * 72,
+      phase: Math.random() * Math.PI * 2
+    }));
 
     // Toggle for running in-browser tests (disabled by default so gameplay isn't affected)
     const RUN_TESTS = false;
@@ -71,6 +78,7 @@
     let bullets = [];
     let enemyBullets = [];
     let explosions = [];
+    let lifeItems = [];
 
     // Boss attacks
     let bossLasers = []; // damaging long lasers (move like bullets)
@@ -158,6 +166,7 @@
       bullets = [];
       enemyBullets = [];
       explosions = [];
+      lifeItems = [];
       bossLasers = [];
 
       player.captured = false;
@@ -260,6 +269,12 @@
         setTimeout(() => beep(120, 0.4), 120);
       } else {
         beep(500, 0.1);
+      }
+    }
+
+    function maybeDropLife(x, y) {
+      if (lifeItems.length === 0 && Math.random() < 0.04) {
+        lifeItems.push({ x, y, w: 20, h: 20, phase: Math.random() * Math.PI * 2 });
       }
     }
 
@@ -395,6 +410,7 @@
               if (en.hp <= 0) {
                 en.alive = false;
                 score += 400;
+                maybeDropLife(en.x + en.w / 2, en.y + en.h / 2);
 
                 // Remove any active lasers owned by this boss
                 bossLasers.forEach(l => { if (l.boss === en) l.active = false; });
@@ -408,6 +424,7 @@
             } else {
               en.alive = false;
               score += 100;
+              maybeDropLife(en.x + en.w / 2, en.y + en.h / 2);
               explode(en.x + en.w / 2, en.y + en.h / 2);
             }
 
@@ -452,6 +469,17 @@
       }
       enemyBullets = enemyBullets.filter(b => !b.dead && b.y < canvas.height);
 
+      for (const item of lifeItems) {
+        item.y += 2.2;
+        item.phase += 0.08;
+        if (aabb(player.x, player.y, player.w, player.h, item.x - item.w / 2, item.y - item.h / 2, item.w, item.h)) {
+          lives++;
+          item.collected = true;
+          beep(980, 0.16);
+        }
+      }
+      lifeItems = lifeItems.filter(item => !item.collected && item.y < canvas.height + item.h);
+
       // Explosions
       explosions.forEach(ex => ex.life--);
       explosions = explosions.filter(ex => ex.life > 0);
@@ -476,23 +504,111 @@
     // =====================
     function drawPlayer(x, y, blink) {
       if (blink && player.invincible % 10 >= 5) return;
+      const cx = x + player.w / 2;
+      const flame = 4 + Math.sin(performance.now() / 55) * 2;
+      ctx.save();
+      ctx.shadowColor = '#24f4ff';
+      ctx.shadowBlur = 12;
+      ctx.fillStyle = '#ffbd58';
+      ctx.beginPath();
+      ctx.moveTo(cx - 5, y + 15);
+      ctx.lineTo(cx, y + 20 + flame);
+      ctx.lineTo(cx + 5, y + 15);
+      ctx.closePath();
+      ctx.fill();
+      ctx.shadowBlur = 0;
       ctx.fillStyle = '#18c7c7';
-      ctx.fillRect(x + 6, y + 6, 18, 12);
-      ctx.fillRect(x + 12, y + 2, 6, 6);
-      ctx.fillStyle = '#e7ffff';
-      ctx.fillRect(x + 13, y + 8, 4, 4);
+      ctx.strokeStyle = '#b8ffff';
+      ctx.lineWidth = 1.5;
+      ctx.beginPath();
+      ctx.moveTo(cx, y);
+      ctx.lineTo(x + 28, y + 17);
+      ctx.lineTo(x + 22, y + 17);
+      ctx.lineTo(cx + 5, y + 13);
+      ctx.lineTo(cx + 4, y + 18);
+      ctx.lineTo(cx - 4, y + 18);
+      ctx.lineTo(cx - 5, y + 13);
+      ctx.lineTo(x + 8, y + 17);
+      ctx.lineTo(x + 2, y + 17);
+      ctx.closePath();
+      ctx.fill();
+      ctx.stroke();
+      ctx.fillStyle = '#eaffff';
+      ctx.beginPath();
+      ctx.moveTo(cx, y + 4);
+      ctx.lineTo(cx + 3, y + 12);
+      ctx.lineTo(cx, y + 14);
+      ctx.lineTo(cx - 3, y + 12);
+      ctx.closePath();
+      ctx.fill();
+      ctx.restore();
+    }
+
+    function drawStarfield(time) {
+      ctx.fillStyle = '#030817';
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      const seconds = time / 1000;
+      for (const star of stars) {
+        const y = (star.y + seconds * star.speed) % canvas.height;
+        const twinkle = 0.45 + (Math.sin(seconds * 2 + star.phase) + 1) * 0.25;
+        ctx.globalAlpha = twinkle;
+        ctx.fillStyle = star.speed > 62 ? '#9cecff' : '#dceaff';
+        if (star.speed > 62) {
+          const streak = 2 + star.speed * 0.055;
+          ctx.fillRect(star.x, y - streak, star.size, streak);
+        } else {
+          ctx.fillRect(star.x, y, star.size, star.size);
+        }
+      }
+      ctx.globalAlpha = 1;
     }
 
     function drawEnemy(en, time) {
       const pulse = (Math.floor(time / 140) % 2) === 0;
 
       if (en.type === 'boss') {
-        ctx.fillStyle = en.hitFlash > 0 ? '#ff6b6b' : '#7c4dff';
-        ctx.fillRect(en.x, en.y, en.w, en.h);
-        ctx.fillStyle = '#1a1a1a';
-        ctx.fillRect(en.x + 6, en.y + 6, en.w - 12, en.h - 12);
-        ctx.fillStyle = pulse ? '#00e5ff' : '#00b8d4';
-        ctx.fillRect(en.x + en.w / 2 - 6, en.y + en.h / 2 - 6, 12, 12);
+        const x = en.x, y = en.y, cx = x + en.w / 2;
+        const hull = en.hitFlash > 0 ? '#ff737c' : '#a34cff';
+        ctx.save();
+        ctx.shadowColor = '#bb52ff';
+        ctx.shadowBlur = 14;
+        ctx.fillStyle = hull;
+        ctx.strokeStyle = en.hitFlash > 0 ? '#fff0f0' : '#e0b5ff';
+        ctx.lineWidth = 1.5;
+        ctx.beginPath();
+        ctx.moveTo(cx, y + 3);
+        ctx.lineTo(cx + 9, y + 8);
+        ctx.lineTo(x + en.w - 2, y + 4);
+        ctx.lineTo(x + en.w - 8, y + 18);
+        ctx.lineTo(x + en.w - 1, y + 23);
+        ctx.lineTo(cx + 13, y + 25);
+        ctx.lineTo(cx + 7, y + en.h - 1);
+        ctx.lineTo(cx, y + 25);
+        ctx.lineTo(cx - 7, y + en.h - 1);
+        ctx.lineTo(cx - 13, y + 25);
+        ctx.lineTo(x + 1, y + 23);
+        ctx.lineTo(x + 8, y + 18);
+        ctx.lineTo(x + 2, y + 4);
+        ctx.lineTo(cx - 9, y + 8);
+        ctx.closePath();
+        ctx.fill();
+        ctx.stroke();
+        ctx.shadowBlur = 0;
+        ctx.fillStyle = '#32164f';
+        ctx.beginPath();
+        ctx.ellipse(cx, y + 15, 18, 7, 0, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.fillStyle = pulse ? '#8cffff' : '#28d9ff';
+        ctx.shadowColor = '#28d9ff';
+        ctx.shadowBlur = 8;
+        ctx.beginPath();
+        ctx.ellipse(cx, y + 15, 7, 5, 0, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.shadowBlur = 0;
+        ctx.fillStyle = '#ffda72';
+        ctx.fillRect(x + 7, y + 19, 4, 2);
+        ctx.fillRect(x + en.w - 11, y + 19, 4, 2);
+        ctx.restore();
 
         // HP indicator
         ctx.fillStyle = '#e7ffff';
@@ -502,13 +618,41 @@
         return;
       }
 
-      ctx.fillStyle = pulse ? '#ff3d00' : '#ff6d00';
-      ctx.fillRect(en.x + 6, en.y + 6, 18, 12);
-      ctx.fillStyle = '#1a1a1a';
-      ctx.fillRect(en.x + 10, en.y + 10, 10, 4);
-      ctx.fillStyle = '#e7ffff';
-      ctx.fillRect(en.x + 12, en.y + 8, 2, 2);
-      ctx.fillRect(en.x + 16, en.y + 8, 2, 2);
+      const x = en.x, y = en.y, cx = x + en.w / 2;
+      const armor = pulse ? '#ff643f' : '#e94b37';
+      ctx.save();
+      ctx.shadowColor = '#ff553d';
+      ctx.shadowBlur = 7;
+      ctx.fillStyle = '#ffd36b';
+      ctx.fillRect(x + 8, y + 16, 3, 3);
+      ctx.fillRect(x + en.w - 11, y + 16, 3, 3);
+      ctx.fillStyle = armor;
+      ctx.strokeStyle = '#ffbd8b';
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.moveTo(cx, y + 2);
+      ctx.lineTo(cx + 5, y + 7);
+      ctx.lineTo(x + en.w - 1, y + 12);
+      ctx.lineTo(x + en.w - 7, y + 14);
+      ctx.lineTo(cx + 4, y + 18);
+      ctx.lineTo(cx, y + 15);
+      ctx.lineTo(cx - 4, y + 18);
+      ctx.lineTo(x + 7, y + 14);
+      ctx.lineTo(x + 1, y + 12);
+      ctx.lineTo(cx - 5, y + 7);
+      ctx.closePath();
+      ctx.fill();
+      ctx.stroke();
+      ctx.shadowBlur = 0;
+      ctx.fillStyle = '#4c1a2a';
+      ctx.beginPath();
+      ctx.ellipse(cx, y + 10, 5, 3, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = pulse ? '#fff4c2' : '#ffbd58';
+      ctx.shadowColor = '#ffe58a';
+      ctx.shadowBlur = 5;
+      ctx.fillRect(cx - 1, y + 8, 2, 3);
+      ctx.restore();
     }
 
     function drawExplosion(ex) {
@@ -521,8 +665,34 @@
       }
     }
 
+    function drawLifeItem(item, time) {
+      const bob = Math.sin(time / 150 + item.phase) * 2;
+      const x = item.x, y = item.y + bob;
+      ctx.save();
+      ctx.shadowColor = '#57ff9a';
+      ctx.shadowBlur = 12;
+      ctx.fillStyle = '#159b60';
+      ctx.strokeStyle = '#baffd4';
+      ctx.lineWidth = 1.5;
+      ctx.beginPath();
+      ctx.moveTo(x, y - 11);
+      ctx.lineTo(x + 10, y - 6);
+      ctx.lineTo(x + 8, y + 6);
+      ctx.lineTo(x, y + 11);
+      ctx.lineTo(x - 8, y + 6);
+      ctx.lineTo(x - 10, y - 6);
+      ctx.closePath();
+      ctx.fill();
+      ctx.stroke();
+      ctx.shadowBlur = 0;
+      ctx.fillStyle = '#effff5';
+      ctx.fillRect(x - 2, y - 6, 4, 12);
+      ctx.fillRect(x - 6, y - 2, 12, 4);
+      ctx.restore();
+    }
+
     function draw(time) {
-      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      drawStarfield(time);
 
       if (!started) {
         ctx.font = '24px monospace';
@@ -558,6 +728,9 @@
 
       // Enemies
       enemies.forEach(en => en.alive && drawEnemy(en, time));
+
+      // Occasional extra-life pickup
+      lifeItems.forEach(item => drawLifeItem(item, time));
 
       // Explosions
       explosions.forEach(drawExplosion);
