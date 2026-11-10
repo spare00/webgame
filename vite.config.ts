@@ -12,6 +12,7 @@ export default defineConfig({
         "omok.html",
         "tetris.html",
         "tetris_2p.html",
+        "twin_cobra.html",
       ],
     },
   },

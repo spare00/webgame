@@ -9,9 +9,9 @@ export class ContraScene extends Phaser.Scene {
   private ground!: Phaser.GameObjects.Rectangle;
   private bullets!: Phaser.Physics.Arcade.Group;
   private enemies!: Phaser.Physics.Arcade.Group;
+  private lifePickups!: Phaser.Physics.Arcade.Group;
   private cursors!: Phaser.Types.Input.Keyboard.CursorKeys;
   private shootKey!: Phaser.Input.Keyboard.Key;
-  private restartKey!: Phaser.Input.Keyboard.Key;
   private scoreText!: Phaser.GameObjects.Text;
   private highScoreText!: Phaser.GameObjects.Text;
   private stageText!: Phaser.GameObjects.Text;
@@ -36,6 +36,7 @@ export class ContraScene extends Phaser.Scene {
   }
 
   create(): void {
+    this.physics.world.setBounds(0, 0, WIDTH, 400);
     this.add.rectangle(WIDTH / 2, 150, WIDTH, 300, 0x14283a);
     this.ground = this.add.rectangle(WIDTH / 2, 359, WIDTH, 82, 0x333333);
     this.physics.add.existing(this.ground, true);
@@ -47,7 +48,7 @@ export class ContraScene extends Phaser.Scene {
     }
 
     this.createCarTexture();
-    this.player = this.add.image(364, 301, "contra-car");
+    this.player = this.add.image(364, 298, "contra-car");
     this.physics.add.existing(this.player);
     const playerBody = this.player.body as Phaser.Physics.Arcade.Body;
     playerBody.setSize(50, 20).setOffset(3, 15).setCollideWorldBounds(true);
@@ -55,12 +56,14 @@ export class ContraScene extends Phaser.Scene {
 
     this.bullets = this.physics.add.group();
     this.enemies = this.physics.add.group();
+    this.lifePickups = this.physics.add.group();
     this.physics.add.overlap(this.bullets, this.enemies, this.onBulletHit);
     this.physics.add.overlap(this.player, this.enemies, this.onPlayerHit);
+    this.physics.add.overlap(this.player, this.lifePickups, this.onLifePickup);
+    this.physics.add.collider(this.lifePickups, this.ground);
 
     this.cursors = this.input.keyboard!.createCursorKeys();
     this.shootKey = this.input.keyboard!.addKey(Phaser.Input.Keyboard.KeyCodes.SPACE);
-    this.restartKey = this.input.keyboard!.addKey(Phaser.Input.Keyboard.KeyCodes.R);
     this.input.keyboard!.addCapture([Phaser.Input.Keyboard.KeyCodes.SPACE, Phaser.Input.Keyboard.KeyCodes.UP]);
 
     this.scoreText = this.add.text(10, 8, "", { color: "#ffffff", fontFamily: "monospace", fontSize: "14px" });
@@ -80,7 +83,7 @@ export class ContraScene extends Phaser.Scene {
 
   update(_time: number, delta: number): void {
     if (this.gameOver) {
-      if (Phaser.Input.Keyboard.JustDown(this.restartKey)) this.restartGame();
+      if (Phaser.Input.Keyboard.JustDown(this.shootKey)) this.restartGame();
       return;
     }
 
@@ -142,12 +145,15 @@ export class ContraScene extends Phaser.Scene {
   }
 
   private spawnEnemy(air: boolean): void {
+    const armored = !air && Math.random() < 0.15;
     const enemy = this.add.image(
       WIDTH + Math.random() * 200,
       air ? 80 + Math.random() * 80 : 309,
-      air ? "contra-airship" : "contra-tank",
+      air ? "contra-airship" : armored ? "contra-armored-tank" : "contra-tank",
     );
     enemy.setData("score", air ? 200 : 100);
+    enemy.setData("armored", armored);
+    enemy.setData("air", air);
     this.enemies.add(enemy);
     const body = enemy.body as Phaser.Physics.Arcade.Body;
     body.setAllowGravity(false);
@@ -159,6 +165,13 @@ export class ContraScene extends Phaser.Scene {
     const bullet = bulletObject as unknown as Phaser.GameObjects.Rectangle;
     const enemy = enemyObject as unknown as Phaser.GameObjects.Image;
     if (!bullet.active || !enemy.active) return;
+    if (enemy.getData("armored")) {
+      bullet.destroy();
+      const spark = this.add.circle(bullet.x, bullet.y, 4, 0xa8f4ff).setDepth(3);
+      this.tweens.add({ targets: spark, scale: 2.4, alpha: 0, duration: 160, onComplete: () => spark.destroy() });
+      return;
+    }
+    this.maybeDropLife(enemy);
     this.score += enemy.getData("score") as number;
     bullet.destroy();
     enemy.destroy();
@@ -173,7 +186,10 @@ export class ContraScene extends Phaser.Scene {
   private onPlayerHit: Phaser.Types.Physics.Arcade.ArcadePhysicsCallback = (_player, enemyObject): void => {
     const enemy = enemyObject as unknown as Phaser.GameObjects.Image;
     if (!enemy.active || this.gameOver || this.invulnerabilityRemaining > 0) return;
-    enemy.destroy();
+    if (!enemy.getData("armored")) {
+      this.maybeDropLife(enemy);
+      enemy.destroy();
+    }
     this.life--;
     this.invulnerabilityRemaining = 500;
     this.blinkElapsed = 0;
@@ -181,6 +197,25 @@ export class ContraScene extends Phaser.Scene {
     this.playExplosion();
     this.updateHud();
     if (this.life <= 0) this.showGameOver();
+  }
+
+  private maybeDropLife(enemy: Phaser.GameObjects.Image): void {
+    if (enemy.getData("air") || Math.random() >= 0.04) return;
+    const pickup = this.add.image(enemy.x, enemy.y, "contra-life").setDepth(2);
+    this.lifePickups.add(pickup);
+    const body = pickup.body as Phaser.Physics.Arcade.Body;
+    body.setAllowGravity(false);
+    body.setVelocity(-(180 + Math.min(this.stage - 1, 5) * 60), 105);
+    this.tweens.add({ targets: pickup, angle: 360, duration: 1200, repeat: -1 });
+  }
+
+  private onLifePickup: Phaser.Types.Physics.Arcade.ArcadePhysicsCallback = (_player, pickupObject): void => {
+    const pickup = pickupObject as unknown as Phaser.GameObjects.Image;
+    if (!pickup.active) return;
+    pickup.destroy();
+    this.life++;
+    this.updateHud();
+    this.playTone(988, 0.18, "triangle", 0.06);
   }
 
   private updateHud(): void {
@@ -192,16 +227,41 @@ export class ContraScene extends Phaser.Scene {
 
   private showGameOver(): void {
     this.gameOver = true;
-    this.player.setVisible(true);
+    this.explodePlayer();
     this.stopBgm();
     this.gameOverObjects.push(
       this.add.text(WIDTH / 2, 180, "GAME OVER", { color: "#ffffff", fontFamily: "monospace", fontSize: "30px" }).setOrigin(0.5),
       this.add.text(WIDTH / 2, 214, `FINAL SCORE: ${this.score}`, { color: "#ffffff", fontFamily: "monospace", fontSize: "18px" }).setOrigin(0.5),
     );
     const button = this.add.rectangle(WIDTH / 2, 266, 170, 42, 0x00aa00).setInteractive();
-    const label = this.add.text(WIDTH / 2, 266, "RESTART (R)", { color: "#ffffff", fontFamily: "monospace", fontSize: "18px" }).setOrigin(0.5);
+    const label = this.add.text(WIDTH / 2, 266, "RESTART (SPACE)", { color: "#ffffff", fontFamily: "monospace", fontSize: "18px" }).setOrigin(0.5);
     button.on("pointerdown", () => this.restartGame());
     this.gameOverObjects.push(button, label);
+  }
+
+  private explodePlayer(): void {
+    const { x, y } = this.player;
+    this.player.setVisible(false);
+    const flash = this.add.circle(x, y, 7, 0xfff2a1).setDepth(4);
+    this.tweens.add({ targets: flash, scale: 5, alpha: 0, duration: 260, onComplete: () => flash.destroy() });
+    const ring = this.add.circle(x, y, 10).setStrokeStyle(3, 0xffa43b).setDepth(4);
+    this.tweens.add({ targets: ring, scale: 4, alpha: 0, duration: 420, onComplete: () => ring.destroy() });
+    for (let i = 0; i < 12; i++) {
+      const angle = (Math.PI * 2 * i) / 12;
+      const distance = 28 + Math.random() * 30;
+      const spark = this.add.rectangle(x, y, 4, 4, i % 3 === 0 ? 0xfff2a1 : 0xff7043).setDepth(4);
+      this.tweens.add({
+        targets: spark,
+        x: x + Math.cos(angle) * distance,
+        y: y + Math.sin(angle) * distance,
+        angle: 180 + Math.random() * 360,
+        scale: 0,
+        alpha: 0,
+        duration: 380 + Math.random() * 160,
+        ease: "Cubic.easeOut",
+        onComplete: () => spark.destroy(),
+      });
+    }
   }
 
   private restartGame(): void {
@@ -209,7 +269,8 @@ export class ContraScene extends Phaser.Scene {
     this.gameOverObjects = [];
     this.enemies.clear(true, true);
     this.bullets.clear(true, true);
-    this.player.setPosition(364, 301);
+    this.lifePickups.clear(true, true);
+    this.player.setPosition(364, 298);
     const body = this.player.body as Phaser.Physics.Arcade.Body;
     body.setVelocity(0, 0);
     this.score = 0;
@@ -312,7 +373,33 @@ export class ContraScene extends Phaser.Scene {
     art.fillStyle(0xe9a54d).fillRect(7, 19, 2, 1).fillRect(45, 19, 2, 1);
     art.fillStyle(0x292d2d).fillRect(49, 15, 5, 10);
     art.generateTexture("contra-tank", 56, 32);
+    art.clear();
+
+    // Heavy armored tank: broad plated hull, angular turret, and shield insignia.
+    art.fillStyle(0x09141f).fillRect(2, 21, 52, 10);
+    art.fillStyle(0x334c60).fillRect(6, 23, 44, 6);
+    art.fillStyle(0x91c6d5).fillRect(10, 24, 6, 4).fillRect(23, 24, 7, 4).fillRect(39, 24, 6, 4);
+    art.fillStyle(0x16384d).fillRect(4, 14, 48, 11);
+    art.fillStyle(0x247a95).fillRect(8, 11, 39, 13);
+    art.fillStyle(0x5de2e8).fillRect(12, 12, 29, 4);
+    art.fillStyle(0x164c66).fillRect(17, 6, 23, 9);
+    art.fillStyle(0x55bed0).fillRect(20, 7, 16, 5);
+    art.fillStyle(0xb5faff).fillRect(24, 7, 8, 2);
+    art.fillStyle(0x102d3d).fillRect(34, 8, 18, 3);
+    art.fillStyle(0x9fffff).fillRect(48, 7, 6, 5);
+    art.fillStyle(0xffd46b).fillRect(7, 17, 5, 3).fillRect(44, 17, 5, 3);
+    art.fillStyle(0xe8fbff).fillRect(24, 17, 8, 2);
+    art.fillStyle(0x36bdd0).fillRect(26, 18, 4, 4);
+    art.generateTexture("contra-armored-tank", 56, 32);
     art.destroy();
+
+    const pickup = this.make.graphics({ x: 0, y: 0 });
+    pickup.fillStyle(0x063627).fillCircle(12, 12, 11);
+    pickup.fillStyle(0x28d987).fillCircle(12, 12, 9);
+    pickup.lineStyle(1, 0xc6ffe4).strokeCircle(12, 12, 8);
+    pickup.fillStyle(0xf1fff7).fillRoundedRect(10, 5, 4, 14, 1).fillRoundedRect(5, 10, 14, 4, 1);
+    pickup.generateTexture("contra-life", 24, 24);
+    pickup.destroy();
   }
 
   private startAudio(): void {

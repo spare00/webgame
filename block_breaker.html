@@ -12,6 +12,11 @@
     .eyebrow{margin:0 0 6px;color:#55e8ef;font-size:11px;font-weight:700;letter-spacing:.28em}
     h1{margin:0;color:#f2fbff;font-size:clamp(24px,4vw,36px);letter-spacing:.08em;text-shadow:0 0 24px #00e5ff55}
     .subtitle{margin:7px 0 0;color:#8ba5bd;font-size:13px;letter-spacing:.04em}
+    .scoreboard{display:flex;justify-content:space-between;align-items:center;gap:10px;margin:0 4px 10px;padding:10px 14px;border:1px solid #274058;border-radius:12px;background:#07111e;color:#bdfaff;text-align:left}
+    .scoreGroup{display:flex;gap:18px;flex-wrap:wrap}
+    .scoreItem{color:#7f9bb4;font-size:10px;font-weight:700;letter-spacing:.12em}
+    .scoreItem strong{display:block;margin-top:3px;color:#e5faff;font-size:15px;letter-spacing:0;font-variant-numeric:tabular-nums}
+    #speedUp{color:#ffd56a}
     .gameFrame{padding:10px;border:1px solid #274058;border-radius:18px;background:linear-gradient(145deg,#101d2d,#09111e);box-shadow:0 24px 70px #0009,inset 0 1px #ffffff0b}
     canvas{
       display:block;
@@ -27,7 +32,7 @@
       display:flex;justify-content:center;gap:10px 24px;flex-wrap:wrap;margin-top:14px;color:#9cb2c8;font-size:12px;
     }
     .info strong{color:#dffaff;font-weight:650}
-    @media(max-width:520px){body{padding:16px 8px}.gameFrame{padding:5px;border-radius:13px}.info{gap:8px 14px;font-size:11px}}
+    @media(max-width:520px){body{padding:16px 8px}.gameFrame{padding:5px;border-radius:13px}.scoreboard{padding:8px 10px}.scoreGroup{gap:10px}.scoreItem{font-size:9px}.scoreItem strong{font-size:13px}.info{gap:8px 14px;font-size:11px}}
   </style>
 </head>
 <body>
@@ -37,6 +42,17 @@
       <h1>NEON BREAKER</h1>
       <p class="subtitle">벽돌을 깨고, 아이템을 모아 다음 스테이지로</p>
     </header>
+    <div class="scoreboard" aria-label="Game score">
+      <div class="scoreGroup">
+        <div class="scoreItem">SCORE<strong id="scoreValue">0</strong></div>
+        <div class="scoreItem">LIFE<strong id="lifeValue">3</strong></div>
+        <div class="scoreItem">STAGE<strong id="stageValue">1</strong></div>
+      </div>
+      <div class="scoreGroup">
+        <div class="scoreItem">BEST<strong id="bestValue">0</strong></div>
+        <div class="scoreItem" id="speedUp" hidden>SPEED UP<strong>ON</strong></div>
+      </div>
+    </div>
     <div class="gameFrame"><canvas id="game" width="640" height="400"></canvas></div>
     <div class="info"><span><strong>← →</strong> 이동</span><span><strong>터치 / 드래그</strong> 패들 조작</span><span><strong>Space</strong> 시작 · 재시작</span></div>
   </div>
@@ -46,6 +62,11 @@
 
     const canvas = document.getElementById('game');
     const ctx = canvas.getContext('2d');
+    const scoreValue = document.getElementById('scoreValue');
+    const lifeValue = document.getElementById('lifeValue');
+    const stageValue = document.getElementById('stageValue');
+    const bestValue = document.getElementById('bestValue');
+    const speedUp = document.getElementById('speedUp');
 
     /* =====================
        🔊 SOUND ENGINE
@@ -498,32 +519,18 @@
         ctx.fillText(it.type === 'expand' ? 'W' : it.type === 'multi' ? '+' : '»', it.x, it.y + 10);
       }
 
-      // HUD
-      ctx.save();
-      ctx.fillStyle = 'rgba(5,12,22,.88)';
-      ctx.fillRect(0, 0, canvas.width, 43);
-      ctx.strokeStyle = 'rgba(95,218,244,.18)';
-      ctx.beginPath(); ctx.moveTo(0, 43.5); ctx.lineTo(canvas.width, 43.5); ctx.stroke();
-      ctx.fillStyle = '#bdfaff';
-      ctx.font = 'bold 13px Arial';
-      ctx.shadowColor = '#0ff';
-      ctx.shadowBlur = 5;
-      ctx.fillText(`SCORE  ${score}`, 16, 19);
-      ctx.fillText(`LIFE  ${lives}`, 16, 36);
-      ctx.textAlign = 'center';
-      ctx.fillText(`STAGE  ${stage}`, canvas.width / 2, 27);
-      ctx.textAlign = 'right';
-      ctx.fillText(`BEST  ${highScore}`, canvas.width - 16, 19);
-      if (speedBoostTimer > 0) ctx.fillText('SPEED UP', canvas.width - 16, 36);
-      ctx.textAlign = 'left';
-      ctx.restore();
+      scoreValue.textContent = score;
+      lifeValue.textContent = lives;
+      stageValue.textContent = stage;
+      bestValue.textContent = highScore;
+      speedUp.hidden = speedBoostTimer <= 0;
 
       if (!running) {
         // high score update (in case user refreshed mid-run and stopped)
         saveHighScoreIfNeeded();
         ctx.save();
         ctx.fillStyle = 'rgba(2,7,15,.76)';
-        ctx.fillRect(0, 43, canvas.width, canvas.height - 43);
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
         ctx.textAlign = 'center';
         ctx.fillStyle = '#f1fcff';
         ctx.font = 'bold 25px Arial';

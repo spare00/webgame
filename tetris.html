@@ -2,69 +2,66 @@
 <html lang="ko">
 <head>
 <meta charset="UTF-8">
-<title>Tetris Final</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#080d18">
+<title>NEON TETRIS</title>
 <style>
-body{
-  background:#000;color:#fff;font-family:monospace;
-  display:flex;justify-content:center;margin-top:20px
-}
-canvas{background:#111;border:2px solid #555}
-.panel{margin-left:20px}
-
-#overlay{
-  position:fixed;
-  inset:0;
-  background:rgba(0,0,0,0.85);
-  color:#fff;
-  display:none;
-  align-items:center;
-  justify-content:center;
-  text-align:center;
-  z-index:10;
-}
-#overlay h1{margin-bottom:10px}
-#overlay p{margin:5px 0}
-
-.flash {
-  animation: flash 0.25s ease-out;
-}
-
-@keyframes flash {
-  from { background: rgba(255,255,255,0.35); }
-  to   { background: rgba(0,0,0,0); }
-}
-
-.level-up {
-  animation: pop 0.4s ease-out;
-}
-
-@keyframes pop {
-  0%   { transform: scale(1);   color: #fff; }
-  50%  { transform: scale(1.6); color: #ff0; }
-  100% { transform: scale(1);   color: #fff; }
-}
-
+*{box-sizing:border-box}
+body{margin:0;min-height:100vh;padding:28px 16px;display:grid;place-items:center;background:radial-gradient(ellipse at 50% 8%,#15243a 0,#080d18 48%,#03050a 100%);color:#e7f7ff;font-family:Inter,'Segoe UI',Arial,sans-serif}
+main{width:min(760px,96vw);text-align:center}
+header{margin-bottom:18px}
+.eyebrow{margin:0 0 6px;color:#55e8ef;font-size:11px;font-weight:700;letter-spacing:.28em}
+h1{margin:0;color:#f2fbff;font-size:clamp(24px,4vw,36px);letter-spacing:.12em;text-shadow:0 0 24px #00e5ff55}
+.subtitle{margin:7px 0 0;color:#8ba5bd;font-size:13px;letter-spacing:.04em}
+.gameFrame{display:flex;justify-content:center;align-items:stretch;gap:14px;padding:10px;border:1px solid #274058;border-radius:18px;background:linear-gradient(145deg,#101d2d,#09111e);box-shadow:0 24px 70px #0009,inset 0 1px #ffffff0b}
+#game{display:block;width:min(60vw,240px);height:auto;aspect-ratio:1/2;border:1px solid #295169;border-radius:9px;background:#050a14;box-shadow:0 0 35px #00d9ff12;image-rendering:pixelated}
+.panel{width:120px;display:flex;flex-direction:column;gap:9px;text-align:left}
+.card{padding:11px;border:1px solid #1f344a;border-radius:11px;background:#07111e}
+.label{display:block;margin-bottom:6px;color:#7f9bb4;font-size:10px;font-weight:700;letter-spacing:.16em;text-transform:uppercase}
+.value{color:#e5faff;font-size:20px;font-weight:700;font-variant-numeric:tabular-nums}
+#highScore{font-size:16px}
+#next{display:block;width:80px;height:80px;margin:auto;background:#050a14;border:1px solid #1d354a;border-radius:7px}
+.info{display:flex;justify-content:center;gap:8px 22px;flex-wrap:wrap;margin:14px 0 0;color:#9cb2c8;font-size:12px}
+.info strong{color:#dffaff;font-weight:650}
+#overlay{position:fixed;inset:0;background:#030812d9;backdrop-filter:blur(5px);color:#fff;display:none;align-items:center;justify-content:center;text-align:center;z-index:10;padding:20px}
+#overlay>div{width:min(360px,100%);padding:30px;border:1px solid #28536b;border-radius:18px;background:linear-gradient(145deg,#102033,#07101d);box-shadow:0 24px 80px #000c}
+#overlay h2{margin:0 0 14px;color:#ff758b;letter-spacing:.12em}
+#overlay p{margin:7px 0;color:#9cb2c8}
+#overlay strong{color:#e5faff}
+.flash{animation:flash .25s ease-out}
+@keyframes flash{from{background:rgba(255,255,255,.35)}to{background:rgba(0,0,0,0)}}
+.level-up{animation:pop .4s ease-out}
+@keyframes pop{0%{transform:scale(1);color:#fff}50%{transform:scale(1.6);color:#ff0}100%{transform:scale(1);color:#fff}}
+@media(max-width:520px){body{padding:16px 8px}.gameFrame{gap:8px;padding:6px;border-radius:13px}#game{width:min(62vw,240px)}.panel{width:min(27vw,100px);gap:6px}.card{padding:8px}.value{font-size:17px}#highScore{font-size:14px}#next{width:68px;height:68px}.info{gap:8px 14px;font-size:11px}}
+@media(prefers-reduced-motion:reduce){*,*::before,*::after{animation-duration:.01ms!important;scroll-behavior:auto!important}}
 </style>
 </head>
 <body>
-
-<canvas id="game" width="240" height="480"></canvas>
-
-<div class="panel">
-  <h3>Next</h3>
-  <canvas id="next" width="80" height="80"></canvas>
-  <h3>Score</h3><div id="score">0</div>
-  <h3>High</h3><div id="highScore">0</div>
-  <h3>Level</h3><div id="level">1</div>
-</div>
+<main>
+  <header>
+    <p class="eyebrow">ARCADE · 02</p>
+    <h1>NEON TETRIS</h1>
+    <p class="subtitle">완성된 줄을 지우고 최고 점수에 도전하세요</p>
+  </header>
+  <div class="gameFrame">
+    <canvas id="game" width="240" height="480" aria-label="Tetris game board"></canvas>
+    <aside class="panel" aria-label="Game statistics">
+      <div class="card"><span class="label">Next</span><canvas id="next" width="80" height="80" aria-label="Next piece"></canvas></div>
+      <div class="card"><span class="label">Score</span><div class="value" id="score">0</div></div>
+      <div class="card"><span class="label">Best</span><div class="value" id="highScore">0</div></div>
+      <div class="card"><span class="label">Level</span><div class="value" id="level">1</div></div>
+    </aside>
+  </div>
+  <div class="info"><span><strong>← / →</strong> 이동</span><span><strong>↑</strong> 회전</span><span><strong>↓</strong> 빠르게 내리기</span><span><strong>SPACE</strong> 즉시 내리기 · 게임 오버 후 재시작</span><span><strong>B</strong> 음악 켜기/끄기</span></div>
+</main>
 
 <div id="overlay">
   <div>
-    <h1>GAME OVER</h1>
-    <p>Score: <span id="finalScore"></span></p>
-    <p>High Score: <span id="finalHighScore"></span></p>
-    <p>Level: <span id="finalLevel"></span></p>
-    <p style="margin-top:15px">Press <b>R</b> to Restart</p>
+    <h2>GAME OVER</h2>
+    <p>Score: <strong id="finalScore"></strong></p>
+    <p>Best: <strong id="finalHighScore"></strong></p>
+    <p>Level: <strong id="finalLevel"></strong></p>
+    <p style="margin-top:18px">Press <strong>SPACE</strong> to play again</p>
   </div>
 </div>
 
@@ -360,6 +357,22 @@ function drawMatrix(m,o,c){
 function draw(){
   ctx.fillStyle="#000";
   ctx.fillRect(0,0,canvas.width,canvas.height);
+  ctx.fillStyle="#0a1220";
+  ctx.fillRect(0,0,COLS,ROWS);
+  ctx.strokeStyle="rgba(38,52,74,0.62)";
+  ctx.lineWidth=0.05;
+  for(let x=1;x<COLS;x++){
+    ctx.beginPath();
+    ctx.moveTo(x,0);
+    ctx.lineTo(x,ROWS);
+    ctx.stroke();
+  }
+  for(let y=1;y<ROWS;y++){
+    ctx.beginPath();
+    ctx.moveTo(0,y);
+    ctx.lineTo(COLS,y);
+    ctx.stroke();
+  }
   drawMatrix(arena,{x:0,y:0},ctx);
   drawMatrix(player.matrix,player.pos,ctx);
 }
@@ -379,6 +392,7 @@ function updateUI(){
 /* ===== Game Over ===== */
 function endGame(){
   gameOver = true;
+  stopBGM();
 
   if (player.score > bestScore) {
     bestScore = player.score;
@@ -434,8 +448,9 @@ function update(t=0){
 
 /* ===== Input ===== */
 document.addEventListener("keydown",e=>{
+  if (["ArrowLeft", "ArrowRight", "ArrowDown", "ArrowUp", " "].includes(e.key)) e.preventDefault();
   if(gameOver){
-    if(e.key==="r"||e.key==="R") startGame();
+    if(e.code==="Space") startGame();
     return;
   }
 
@@ -459,7 +474,7 @@ function startGame(){
   player.next=null;
   gameOver=false;
   overlay.style.display="none";
-  dropInterval=800;
+  dropCounter=0;lastTime=0;dropInterval=800;
   resetPlayer();
   updateUI();
   update();
