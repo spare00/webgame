@@ -13,6 +13,7 @@ export default defineConfig({
         "tetris.html",
         "tetris_2p.html",
         "twin_cobra.html",
+        "memory.html",
       ],
     },
   },

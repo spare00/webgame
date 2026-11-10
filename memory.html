@@ -1,0 +1,349 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>네온 메모리</title>
+  <style>
+    body {
+      background: #0a0a14;
+      color: #fff;
+      font-family: 'Orbitron', system-ui, sans-serif;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      margin: 0;
+      padding: 20px;
+      min-height: 100vh;
+    }
+
+    h1 {
+      text-align: center;
+      text-shadow: 0 0 10px #0ff, 0 0 20px #0ff;
+      margin-bottom: 20px;
+    }
+
+    #game-info {
+      display: flex;
+      justify-content: space-between;
+      width: 100%;
+      max-width: 400px;
+      margin-bottom: 20px;
+      font-size: 18px;
+      text-shadow: 0 0 5px #0ff;
+    }
+
+    #game-board {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 10px;
+      width: min(400px, 100%);
+      margin: 0 auto;
+    }
+
+    .card {
+      aspect-ratio: 1;
+      padding: 0;
+      min-width: 0;
+      background: linear-gradient(145deg, #0b1a2d, #05070c);
+      border: 2px solid rgba(0, 255, 255, 0.3);
+      border-radius: 8px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 32px;
+      cursor: pointer;
+      box-shadow:
+        inset 0 0 10px rgba(0, 255, 255, 0.15),
+        0 0 6px rgba(0, 255, 255, 0.25);
+      transition: all 0.3s ease;
+      transform-style: preserve-3d;
+    }
+
+    .card:hover {
+      box-shadow:
+        inset 0 0 14px rgba(0, 255, 255, 0.4),
+        0 0 12px rgba(0, 255, 255, 0.8);
+      transform: translateY(-3px);
+    }
+
+    .card.flipped {
+      background: linear-gradient(145deg, #0b3d5c, #05070c);
+      box-shadow:
+        inset 0 0 15px rgba(0, 255, 255, 0.6),
+        0 0 15px rgba(0, 255, 255, 0.8);
+      transform: none;
+    }
+
+    .card.matched {
+      background: linear-gradient(145deg, #0b5c3d, #05070c);
+      box-shadow:
+        inset 0 0 15px rgba(0, 255, 255, 0.6),
+        0 0 15px rgba(0, 255, 255, 0.8);
+      cursor: default;
+    }
+
+    .card.matched:hover {
+      transform: none;
+    }
+
+    #controls {
+      margin-top: 30px;
+      display: flex;
+      gap: 15px;
+    }
+
+    button {
+      padding: 12px 24px;
+      background: rgba(0, 255, 255, 0.06);
+      color: #9ffcff;
+      border: 1px solid rgba(0, 255, 255, 0.25);
+      border-radius: 8px;
+      font-family: 'Orbitron', system-ui, sans-serif;
+      font-size: 16px;
+      cursor: pointer;
+      box-shadow:
+        inset 0 0 10px rgba(0, 255, 255, 0.15),
+        0 0 6px rgba(0, 255, 255, 0.25);
+      transition: all 0.2s ease;
+    }
+
+    button:hover {
+      background: rgba(0, 255, 255, 0.18);
+      border-color: #5fffff;
+      box-shadow:
+        inset 0 0 14px rgba(0, 255, 255, 0.4),
+        0 0 12px rgba(0, 255, 255, 0.8);
+      transform: translateY(-1px);
+    }
+
+    button:focus {
+      outline: 2px solid #0ff;
+      outline-offset: 2px;
+    }
+
+    #win-message {
+      display: none;
+      text-align: center;
+      margin-top: 20px;
+      padding: 20px;
+      background: rgba(0, 255, 255, 0.06);
+      border: 1px solid rgba(0, 255, 255, 0.25);
+      border-radius: 8px;
+      font-size: 20px;
+      text-shadow: 0 0 5px #0ff;
+    }
+
+    @media (max-width: 480px) {
+      #game-board {
+        grid-template-columns: repeat(4, 1fr);
+        gap: 8px;
+      }
+
+      .card {
+        font-size: 24px;
+      }
+
+      h1 {
+        font-size: 24px;
+      }
+    }
+  </style>
+</head>
+<body>
+  <h1>네온 메모리</h1>
+
+  <div id="game-info">
+    <div>시도: <span id="attempts">0</span></div>
+    <div>시간: <span id="timer">0</span>s</div>
+  </div>
+
+  <div id="game-board"></div>
+
+  <div id="controls">
+    <button id="restart-btn">재시작</button>
+    <button id="home-btn">홈으로</button>
+  </div>
+
+  <div id="win-message">
+    <p>축하합니다! 모든 카드를 맞췄습니다!</p>
+    <p>총 시도: <span id="final-attempts"></span>, 총 시간: <span id="final-time"></span>s</p>
+  </div>
+
+  <script>
+    // Game configuration
+    const EMOJIS = ['🎮', '👾', '🕹️', '🎯', '🎲', '🃏', '🎪', '🎭'];
+    const BOARD_SIZE = 4;
+    const TOTAL_CARDS = BOARD_SIZE * BOARD_SIZE;
+
+    // Game state
+    let cards = [];
+    let flippedCards = [];
+    let matchedPairs = 0;
+    let attempts = 0;
+    let timer = 0;
+    let timerInterval = null;
+    let mismatchTimeout = null;
+    let gameStarted = false;
+    let isProcessing = false;
+
+    // DOM elements
+    const gameBoard = document.getElementById('game-board');
+    const attemptsElement = document.getElementById('attempts');
+    const timerElement = document.getElementById('timer');
+    const restartBtn = document.getElementById('restart-btn');
+    const homeBtn = document.getElementById('home-btn');
+    const winMessage = document.getElementById('win-message');
+    const finalAttempts = document.getElementById('final-attempts');
+    const finalTime = document.getElementById('final-time');
+
+    // Initialize game
+    function initGame() {
+      clearInterval(timerInterval);
+      clearTimeout(mismatchTimeout);
+      timerInterval = mismatchTimeout = null;
+      // Reset game state
+      cards = [];
+      flippedCards = [];
+      matchedPairs = 0;
+      attempts = 0;
+      timer = 0;
+      gameStarted = false;
+      isProcessing = false;
+
+      // Clear board
+      gameBoard.innerHTML = '';
+
+      // Update UI
+      attemptsElement.textContent = attempts;
+      timerElement.textContent = timer;
+      winMessage.style.display = 'none';
+
+      // Create card pairs
+      const emojiPairs = EMOJIS.slice(0, TOTAL_CARDS / 2);
+      let cardValues = [...emojiPairs, ...emojiPairs];
+
+      // Shuffle cards
+      shuffleArray(cardValues);
+
+      // Create card elements
+      cardValues.forEach((value, index) => {
+        const card = document.createElement('button');
+        card.className = 'card';
+        card.type = 'button';
+        card.setAttribute('aria-label', `카드 ${index + 1} 뒤집기`);
+        card.dataset.value = value;
+        card.dataset.index = index;
+        card.textContent = '?';
+
+        card.addEventListener('click', () => flipCard(card));
+
+        gameBoard.appendChild(card);
+        cards.push({ element: card, value, flipped: false, matched: false });
+      });
+    }
+
+    // Fisher-Yates shuffle algorithm
+    function shuffleArray(array) {
+      for (let i = array.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [array[i], array[j]] = [array[j], array[i]];
+      }
+    }
+
+    // Flip a card
+    function flipCard(cardElement) {
+      // Prevent flipping during processing or if card is already flipped/matched
+      if (isProcessing || cardElement.classList.contains('flipped') || cardElement.classList.contains('matched')) {
+        return;
+      }
+
+      // Start timer on first move
+      if (!gameStarted) {
+        startTimer();
+        gameStarted = true;
+      }
+
+      // Flip the card
+      cardElement.textContent = cardElement.dataset.value;
+      cardElement.setAttribute('aria-label', cardElement.dataset.value);
+      cardElement.classList.add('flipped');
+
+      // Add to flipped cards
+      const cardIndex = parseInt(cardElement.dataset.index);
+      flippedCards.push({ element: cardElement, index: cardIndex });
+
+      // Check if two cards are flipped
+      if (flippedCards.length === 2) {
+        isProcessing = true;
+        attempts++;
+        attemptsElement.textContent = attempts;
+
+        const [firstCard, secondCard] = flippedCards;
+
+        // Check for match
+        if (firstCard.element.dataset.value === secondCard.element.dataset.value) {
+          // Match found
+          firstCard.element.classList.add('matched');
+          secondCard.element.classList.add('matched');
+          matchedPairs++;
+
+          // Clear flipped cards
+          flippedCards = [];
+          isProcessing = false;
+
+          // Check for win
+          if (matchedPairs === TOTAL_CARDS / 2) {
+            endGame();
+          }
+        } else {
+          // No match - flip back after delay
+          mismatchTimeout = setTimeout(() => {
+            mismatchTimeout = null;
+            firstCard.element.textContent = '?';
+            firstCard.element.setAttribute('aria-label', `카드 ${firstCard.index + 1} 뒤집기`);
+            firstCard.element.classList.remove('flipped');
+            secondCard.element.textContent = '?';
+            secondCard.element.setAttribute('aria-label', `카드 ${secondCard.index + 1} 뒤집기`);
+            secondCard.element.classList.remove('flipped');
+
+            flippedCards = [];
+            isProcessing = false;
+          }, 1000);
+        }
+      }
+    }
+
+    // Start the timer
+    function startTimer() {
+      if (timerInterval) clearInterval(timerInterval);
+
+      timerInterval = setInterval(() => {
+        timer++;
+        timerElement.textContent = timer;
+      }, 1000);
+    }
+
+    // End the game
+    function endGame() {
+      if (timerInterval) {
+        clearInterval(timerInterval);
+      }
+
+      // Show win message
+      finalAttempts.textContent = attempts;
+      finalTime.textContent = timer;
+      winMessage.style.display = 'block';
+    }
+
+    // Event listeners
+    restartBtn.addEventListener('click', initGame);
+    homeBtn.addEventListener('click', () => {
+      window.location.href = './index.html';
+    });
+
+    // Initialize the game
+    initGame();
+  </script>
+</body>
+</html>
