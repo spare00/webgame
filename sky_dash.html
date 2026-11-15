@@ -1,0 +1,21 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="theme-color" content="#10152e" />
+  <title>스카이 대시</title>
+  <style>
+    *{box-sizing:border-box}body{margin:0;min-height:100vh;display:grid;place-items:center;padding:20px;background:radial-gradient(ellipse at 50% 0,#293d69,#151a37 58%,#0b0e20);color:#f3f5ff;font-family:system-ui,sans-serif}main{width:min(100%,940px);text-align:center}.top{display:flex;align-items:center;justify-content:space-between;margin:0 auto 14px;max-width:900px}.brand{text-align:left}.brand h1{margin:0;font-size:clamp(22px,4vw,32px);letter-spacing:-.04em}.brand p{margin:4px 0 0;color:#a4b4d4;font-size:12px}a{color:#9ee4ff;text-decoration:none;font-size:13px}.game{overflow:hidden;border:1px solid #92d9ff38;border-radius:18px;background:#10152e;box-shadow:0 24px 80px #0009}.game canvas{display:block;width:100%;height:auto;touch-action:none}.help{display:flex;justify-content:center;flex-wrap:wrap;gap:8px 22px;margin:13px 0 0;color:#a2afcd;font-size:12px}.help b{color:#f3f6ff}.jump{display:none;margin:12px auto 0;padding:12px 38px;border:1px solid #a1e5ff55;border-radius:12px;background:linear-gradient(135deg,#50bfd8,#4776d1);color:white;font:750 14px system-ui;touch-action:none}@media(max-width:600px){body{padding:12px 8px}.help{gap:6px 10px;font-size:10px}.jump{display:block}}
+  </style>
+</head>
+<body>
+  <main>
+    <header class="top"><div class="brand"><h1>🌠 스카이 대시</h1><p>구름길을 달리며 반짝이는 별을 모으세요</p></div><a href="./index.html">← 게임 목록</a></header>
+    <div class="game" id="game"></div>
+    <button class="jump" id="jump">점프!</button>
+    <p class="help"><span><b>Space / ↑ / W</b> 점프 · 한 번 더 눌러 더블 점프</span><span><b>M</b> 효과음 켜기/끄기</span><span><b>R</b> 다시 시작</span></p>
+  </main>
+  <script type="module" src="/src/skyDash.ts"></script>
+</body>
+</html>

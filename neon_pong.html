@@ -1,0 +1,21 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="theme-color" content="#0b0b18" />
+  <title>네온 퐁 2인 대전</title>
+  <style>
+    *{box-sizing:border-box}body{margin:0;min-height:100vh;display:grid;place-items:center;padding:20px;background:radial-gradient(ellipse at 50% 0,#28204b,#0d0d1b 58%,#080914);color:#f3efff;font-family:system-ui,sans-serif}main{width:min(100%,940px);text-align:center}.top{display:flex;align-items:center;justify-content:space-between;margin:0 auto 14px;max-width:900px}.brand{text-align:left}.brand h1{margin:0;font-size:clamp(22px,4vw,32px);letter-spacing:-.04em}.brand p{margin:4px 0 0;color:#aaa0c8;font-size:12px}a{color:#dfb1ff;text-decoration:none;font-size:13px}.game{overflow:hidden;border:1px solid #d4a3ff36;border-radius:18px;background:#0b0b18;box-shadow:0 24px 80px #0009}.game canvas{display:block;width:100%;height:auto;touch-action:none}.help{display:flex;justify-content:center;flex-wrap:wrap;gap:8px 22px;margin:13px 0 0;color:#aaa0c8;font-size:12px}.help b{color:#f2edff}.mobile{display:none;margin:14px auto 0;max-width:600px;grid-template-columns:1fr 1fr;gap:14px}.controls{display:grid;grid-template-columns:repeat(3,40px);gap:5px;justify-content:center}.controls button{height:38px;border:1px solid #ffffff28;border-radius:9px;background:#17152a;color:#eee7ff;font-weight:700;touch-action:none}.controls button:nth-child(1){grid-column:2}.controls button:nth-child(2){grid-column:2;grid-row:2}.controls button:active{background:#38305b}.player-controls{display:flex;align-items:center;justify-content:center;gap:9px}.player-controls label{font-size:10px;color:#c6badb}.p1 label{color:#87f0e0}.p2 label{color:#f5a6ff}@media(max-width:600px){body{padding:12px 8px}.help{gap:6px 10px;font-size:10px}.mobile{display:grid}}
+  </style>
+</head>
+<body>
+  <main>
+    <header class="top"><div class="brand"><h1>🏓 네온 퐁</h1><p>고전 아케이드 대전 · 먼저 7점을 획득하세요</p></div><a href="./index.html">← 게임 목록</a></header>
+    <div class="game" id="game"></div>
+    <div class="mobile"><div class="player-controls p1"><label>P1</label><div class="controls"><button data-paddle="1" data-dir="up">▲</button><button data-paddle="1" data-dir="down">▼</button></div></div><div class="player-controls p2"><label>P2</label><div class="controls"><button data-paddle="2" data-dir="up">▲</button><button data-paddle="2" data-dir="down">▼</button></div></div></div>
+    <p class="help"><span><b>P1</b> W / S</span><span><b>P2</b> ↑ / ↓</span><span><b>M</b> 효과음 켜기/끄기</span><span><b>R</b> 재시작</span></p>
+  </main>
+  <script type="module" src="/src/neonPong.ts"></script>
+</body>
+</html>

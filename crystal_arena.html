@@ -1,0 +1,20 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="theme-color" content="#0b1020" />
+  <title>크리스털 아레나</title>
+  <style>
+    *{box-sizing:border-box}body{margin:0;min-height:100vh;display:grid;place-items:center;padding:20px;background:radial-gradient(ellipse at 50% 0,#17284a,#0b1020 58%,#080b14);color:#edf4ff;font-family:system-ui,sans-serif}main{width:min(100%,900px);text-align:center}.top{display:flex;align-items:center;justify-content:space-between;margin:0 auto 14px;max-width:860px}.brand{text-align:left}.brand h1{margin:0;font-size:clamp(22px,4vw,32px);letter-spacing:-.04em}.brand p{margin:4px 0 0;color:#91a3c4;font-size:12px}a{color:#a9e8c2;text-decoration:none;font-size:13px}.game{overflow:hidden;border:1px solid #8caaed35;border-radius:18px;background:#0a1020;box-shadow:0 24px 80px #0009}.game canvas{display:block;width:100%;height:auto;touch-action:none}.help{display:flex;justify-content:center;flex-wrap:wrap;gap:8px 22px;margin:13px 0 0;color:#93a2c1;font-size:12px}.help b{color:#e4efff}@media(max-width:600px){body{padding:12px 8px}.help{gap:6px 12px;font-size:10px}}
+  </style>
+</head>
+<body>
+  <main>
+    <header class="top"><div class="brand"><h1>💎 크리스털 아레나</h1><p>끝없이 몰려오는 몬스터에서 살아남으세요</p></div><a href="./index.html">← 게임 목록</a></header>
+    <div class="game" id="game"></div>
+    <p class="help"><span><b>W A S D</b> 이동</span><span><b>마우스</b> 조준</span><span><b>Space / 클릭</b> 발사</span><span><b>Shift</b> 대시</span><span><b>M</b> 효과음 켜기/끄기</span><span><b>R</b> 재시작</span></p>
+  </main>
+  <script type="module" src="/src/crystalArena.ts"></script>
+</body>
+</html>

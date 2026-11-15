@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="theme-color" content="#101b27" />
+  <title>네온 라이트 아웃</title>
+  <style>
+    *{box-sizing:border-box}body{margin:0;min-height:100vh;display:grid;place-items:center;padding:24px 16px;background:radial-gradient(ellipse at 50% 0,#25434a,#14232d 58%,#0a121a);color:#f0fbf7;font-family:system-ui,sans-serif}.app{width:min(100%,510px);margin:auto}.top{display:flex;justify-content:space-between;align-items:center;margin-bottom:18px}.brand h1{margin:0;font-size:27px;letter-spacing:-.05em}.brand p{margin:3px 0 0;color:#9eb8b8;font-size:12px}a{color:#94e8d8;text-decoration:none;font-size:13px}.panel{padding:18px;border:1px solid #aeffe320;border-radius:20px;background:linear-gradient(145deg,#192b30,#111d25);box-shadow:0 20px 50px #0005}.stats{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}.stat{padding:9px 10px;text-align:center;border:1px solid #ffffff0d;border-radius:11px;background:#0c171d}.stat small{display:block;color:#91aaa9;font-size:10px;letter-spacing:.08em;text-transform:uppercase}.stat strong{font-size:18px;font-variant-numeric:tabular-nums}.board{display:grid;grid-template-columns:repeat(5,1fr);gap:11px;width:min(100%,390px);aspect-ratio:1;margin:20px auto;padding:13px;border:1px solid #bbffeb20;border-radius:17px;background:#0b161c;box-shadow:inset 0 0 28px #0005}.light{border:1px solid #b0d8d023;border-radius:12px;background:linear-gradient(145deg,#203239,#17262e);cursor:pointer;transition:background .18s,box-shadow .18s,transform .12s}.light.on{border-color:#b6fff58c;background:linear-gradient(145deg,#9bffe8,#4bd2c3);box-shadow:0 0 17px #6ffff58c,inset 0 2px 5px #fff9}.light:hover{transform:scale(1.04)}.light:active{transform:scale(.95)}.light:focus-visible{outline:2px solid #eaffc6;outline-offset:2px}.status{min-height:23px;margin:0;text-align:center;color:#a9c4bc;font-size:13px}.status.win{color:#caffac}.toolbar{display:flex;justify-content:space-between;gap:8px;margin-top:14px}.group{display:flex;gap:8px}.btn{padding:9px 12px;border:1px solid #b5efd12b;border-radius:10px;background:#112420;color:#dff8eb;font:650 12px system-ui;cursor:pointer}.btn:hover{background:#1d3a34}.btn.primary{background:linear-gradient(135deg,#3ba88c,#28746d);color:#fff}.btn:focus-visible{outline:2px solid #d8ffe8;outline-offset:2px}.help{text-align:center;color:#829c9b;font-size:11px;margin:14px 0 0}@media(max-width:390px){body{padding:16px 10px}.panel{padding:12px}.board{gap:7px;padding:9px;border-radius:14px}.light{border-radius:9px}.brand h1{font-size:23px}.btn{padding:8px 9px;font-size:11px}}
+  </style>
+</head>
+<body>
+  <main class="app">
+    <header class="top"><div class="brand"><h1>💡 네온 라이트 아웃</h1><p>한 번 눌러 주변 불빛까지 모두 꺼보세요</p></div><a href="./index.html">← 게임 목록</a></header>
+    <section class="panel" aria-label="라이트 아웃 퍼즐">
+      <div class="stats"><div class="stat"><small>레벨</small><strong id="level">1</strong></div><div class="stat"><small>이번 레벨</small><strong id="moves">0</strong></div><div class="stat"><small>최고 레벨</small><strong id="best">1</strong></div></div>
+      <div class="board" id="board" role="grid" aria-label="5 곱하기 5 불빛 퍼즐"></div>
+      <p class="status" id="status" aria-live="polite">불빛을 모두 끄면 레벨이 올라갑니다.</p>
+      <div class="toolbar"><div class="group"><button class="btn" id="reset">다시 섞기</button><button class="btn" id="sound" aria-pressed="true">🔊 소리 켜짐</button></div><button class="btn primary" id="next" hidden>다음 레벨 →</button></div>
+    </section>
+    <p class="help">누른 칸과 위·아래·왼쪽·오른쪽 칸의 불빛이 함께 바뀝니다.</p>
+  </main>
+<script>
+const N=5,$=id=>document.getElementById(id),boardEl=$('board');let lights=[],level=1,moves=0,solved=false,muted=false,audio;let best=Number(localStorage.getItem('lightsOutBest')||1);$('best').textContent=best;
+function tone(freq,dur=.08,type='sine',vol=.035,delay=0){if(muted)return;try{audio??=new(window.AudioContext||window.webkitAudioContext)();if(audio.state==='suspended')audio.resume();const t=audio.currentTime+delay,o=audio.createOscillator(),g=audio.createGain();o.type=type;o.frequency.setValueAtTime(freq,t);g.gain.setValueAtTime(vol,t);g.gain.exponentialRampToValueAtTime(.001,t+dur);o.connect(g).connect(audio.destination);o.start(t);o.stop(t+dur)}catch{audio=undefined}}
+function setup(){lights=Array(N*N).fill(false);const count=11+Math.min(level*2,12);for(let i=0;i<count;i++)flip(Math.floor(Math.random()*N),Math.floor(Math.random()*N));if(!lights.some(Boolean))setup();moves=0;solved=false;render();$('level').textContent=level;$('moves').textContent=moves;$('next').hidden=true;$('status').className='status';$('status').textContent='불빛을 모두 끄면 레벨이 올라갑니다.'}
+function flip(r,c){for(const [y,x] of [[r,c],[r-1,c],[r+1,c],[r,c-1],[r,c+1]])if(y>=0&&y<N&&x>=0&&x<N){const i=y*N+x;lights[i]=!lights[i]}}
+function tap(r,c){if(solved)return;flip(r,c);moves++;$('moves').textContent=moves;render();tone(390+(r+c)%5*65,.075,'triangle');if(lights.every(v=>!v)){solved=true;tone(620,.18,'triangle',.05);tone(780,.18,'triangle',.05,.14);tone(1040,.3,'triangle',.05,.28);level++;best=Math.max(best,level);localStorage.setItem('lightsOutBest',String(best));$('level').textContent=level;$('best').textContent=best;$('status').className='status win';$('status').textContent=`클리어! ${moves}번 만에 불빛을 모두 껐어요.`;$('next').hidden=false}}
+function render(){boardEl.innerHTML='';lights.forEach((on,i)=>{const b=document.createElement('button');b.className='light'+(on?' on':'');b.type='button';b.setAttribute('role','gridcell');b.setAttribute('aria-label',`행 ${Math.floor(i/N)+1}, 열 ${i%N+1}, ${on?'켜짐':'꺼짐'}`);b.addEventListener('click',()=>tap(Math.floor(i/N),i%N));boardEl.append(b)})}
+$('reset').addEventListener('click',()=>{setup();tone(440,.07,'triangle')});$('next').addEventListener('click',()=>setup());$('sound').addEventListener('click',()=>{muted=!muted;$('sound').textContent=muted?'🔇 소리 꺼짐':'🔊 소리 켜짐';$('sound').setAttribute('aria-pressed',String(!muted));if(!muted)tone(660,.1,'triangle')});setup();
+</script>
+</body>
+</html>

@@ -1,0 +1,21 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="theme-color" content="#0b1020" />
+  <title>네온 듀얼 · 2인 대전</title>
+  <style>
+    *{box-sizing:border-box}body{margin:0;min-height:100vh;display:grid;place-items:center;padding:20px;background:radial-gradient(ellipse at 50% 0,#22244c,#0b1020 60%,#080b14);color:#eef2ff;font-family:system-ui,sans-serif}main{width:min(100%,940px);text-align:center}.top{display:flex;align-items:center;justify-content:space-between;margin:0 auto 14px;max-width:900px}.brand{text-align:left}.brand h1{margin:0;font-size:clamp(22px,4vw,32px);letter-spacing:-.04em}.brand p{margin:4px 0 0;color:#99a5c8;font-size:12px}a{color:#9ce8d8;text-decoration:none;font-size:13px}.game{overflow:hidden;border:1px solid #9a9cec36;border-radius:18px;background:#0b1020;box-shadow:0 24px 80px #0009}.game canvas{display:block;width:100%;height:auto;touch-action:none}.help{display:flex;justify-content:center;flex-wrap:wrap;gap:8px 22px;margin:13px 0 0;color:#99a5c8;font-size:12px}.help b{color:#f2f3ff}.mobile{display:none;margin-top:14px;grid-template-columns:1fr 1fr;gap:12px}.pad{display:grid;grid-template-columns:repeat(3,42px);grid-template-rows:repeat(2,38px);gap:4px;justify-content:center}.pad button,.fire{border:1px solid #ffffff25;border-radius:9px;background:#171c32;color:#e9f1ff;font-weight:700}.pad button:active,.fire:active{background:#343b64}.pad button:nth-child(1){grid-column:2}.pad button:nth-child(2){grid-column:1;grid-row:2}.pad button:nth-child(3){grid-column:2;grid-row:2}.pad button:nth-child(4){grid-column:3;grid-row:2}.fire{padding:0 14px}.p1 .fire{color:#8cf4df}.p2 .fire{color:#ffae98}.pad-wrap{display:flex;align-items:center;justify-content:center;gap:8px}.pad-wrap label{font-size:10px;color:#a2abc4}@media(max-width:600px){body{padding:12px 8px}.help{gap:6px 10px;font-size:10px}.mobile{display:grid}}
+  </style>
+</head>
+<body>
+  <main>
+    <header class="top"><div class="brand"><h1>⚔️ 네온 듀얼</h1><p>두 명의 파일럿, 하나의 아레나. 먼저 5점을 얻으세요!</p></div><a href="./index.html">← 게임 목록</a></header>
+    <div class="game" id="game"></div>
+    <div class="mobile"><div class="pad-wrap p1"><label>P1</label><div class="pad"><button data-player="1" data-dir="up">▲</button><button data-player="1" data-dir="left">◀</button><button data-player="1" data-dir="down">▼</button><button data-player="1" data-dir="right">▶</button></div><button class="fire" data-fire="1">발사</button></div><div class="pad-wrap p2"><label>P2</label><div class="pad"><button data-player="2" data-dir="up">▲</button><button data-player="2" data-dir="left">◀</button><button data-player="2" data-dir="down">▼</button><button data-player="2" data-dir="right">▶</button></div><button class="fire" data-fire="2">발사</button></div></div>
+    <p class="help"><span><b>P1</b> WASD 이동 · F 발사</span><span><b>P2</b> 방향키 이동 · Enter 발사</span><span><b>M</b> 효과음 켜기/끄기</span><span><b>R</b> 재시작</span></p>
+  </main>
+  <script type="module" src="/src/neonDuel.ts"></script>
+</body>
+</html>
