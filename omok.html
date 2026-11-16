@@ -2,87 +2,11 @@
 <html lang="ko">
 <head>
 <meta charset="UTF-8">
-<title>오목 20×20 (3×3 금수 수정 최종)</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#12201d">
+<title>오목 20 × 20</title>
 <style>
-body{
-  background:#111;color:#fff;
-  font-family:system-ui,sans-serif;
-  display:flex;flex-direction:column;align-items:center;
-  margin-top:20px;
-}
-canvas{background:#d8b56a;border:3px solid #333;}
-#status{margin:10px;}
-.turn{font-size:20px;opacity:.4}
-.turn.active{opacity:1;font-weight:bold;transform:scale(1.2)}
-#turn-black{color:#000;background:#fff;padding:2px 8px;border-radius:6px}
-#turn-white{color:#fff;background:#444;padding:2px 8px;border-radius:6px}
-#msg{margin:10px;font-size:20px;color:#ffd700}
-
-#top-ui{
-  display:flex;
-  flex-direction:column;
-  align-items:center;
-  gap:10px;
-  margin-bottom:15px;
-}
-
-/* 턴 + 타이머 바 */
-#turn-bar{
-  display:flex;
-  align-items:center;
-  gap:20px;
-  font-size:20px;
-}
-
-.turn{
-  opacity:0.4;
-  padding:4px 10px;
-  border-radius:8px;
-  transition:0.2s;
-}
-
-.turn.active{
-  opacity:1;
-  font-weight:bold;
-  background:#ffd700;
-  color:#000;
-}
-
-/* 타이머 */
-#timer{
-  font-size:24px;
-  font-weight:bold;
-  min-width:80px;
-  text-align:center;
-}
-
-/* 스코어 */
-#score{
-  font-size:18px;
-  opacity:0.85;
-}
-
-/* 메시지 */
-#msg{
-  font-size:22px;
-  font-weight:bold;
-  color:#ffd700;
-  min-height:28px;
-}
-
-/* 버튼 */
-#controls{
-  display:flex;
-  gap:10px;
-}
-
-#controls button{
-  padding:6px 14px;
-  font-size:14px;
-  border-radius:6px;
-  cursor:pointer;
-}
-
+*{box-sizing:border-box}body{margin:0;min-height:100vh;padding:24px 14px 36px;display:flex;flex-direction:column;align-items:center;background:radial-gradient(ellipse at 50% 0,#243a36,#101916 62%,#0a100e);color:#eff8f2;font-family:system-ui,sans-serif}h2{margin:0 0 16px;font-size:clamp(24px,5vw,34px);letter-spacing:-.04em}.game{width:min(100%,700px);padding:clamp(12px,3vw,22px);border:1px solid #d8f6d52b;border-radius:22px;background:#18241fe8;box-shadow:0 24px 70px #0007}#top-ui{display:flex;flex-direction:column;align-items:center;gap:12px;margin-bottom:16px}#turn-bar{display:flex;align-items:center;justify-content:center;gap:clamp(8px,3vw,24px);width:100%}.turn{padding:7px 13px;border:1px solid #ffffff20;border-radius:999px;opacity:.5;transition:.2s;font-size:clamp(14px,3vw,18px)}.turn.active{opacity:1;transform:scale(1.06);background:#d2f2a6;color:#172017;border-color:transparent;font-weight:750}#timer{min-width:76px;text-align:center;font-size:22px;font-variant-numeric:tabular-nums;font-weight:750;color:#a9edcb}#score{color:#bac9bf;font-size:14px}#score span{color:#fff;font-weight:700}#msg{min-height:28px;color:#dbf8a5;font-size:19px;font-weight:750;text-align:center}#controls{display:flex;flex-wrap:wrap;justify-content:center;gap:8px}#controls button{padding:9px 15px;border:1px solid #ffffff24;border-radius:10px;background:#25352d;color:#eff8f2;font:inherit;font-size:14px;cursor:pointer;transition:background .15s,transform .15s}#controls button:hover{background:#354a3e;transform:translateY(-1px)}#controls button:focus-visible{outline:2px solid #d2f2a6;outline-offset:2px}.board-wrap{width:100%;overflow:hidden;border:1px solid #eed28d55;border-radius:12px;background:#d8b56a}canvas{display:block;width:100%;height:auto;aspect-ratio:1;touch-action:manipulation;cursor:crosshair}.hint{margin:12px 0 0;color:#a9b9ae;text-align:center;font-size:12px}@media(max-width:420px){body{padding:14px 8px 24px}.game{padding:10px;border-radius:16px}.turn{padding:6px 9px}#timer{min-width:58px;font-size:19px}}
 </style>
 </head>
 
@@ -90,6 +14,7 @@ canvas{background:#d8b56a;border:3px solid #333;}
 
 <h2>오목 20 × 20</h2>
 
+<section class="game" aria-label="오목 게임">
 <div id="top-ui">
 
   <!-- 턴 & 타이머 -->
@@ -114,12 +39,15 @@ canvas{background:#d8b56a;border:3px solid #333;}
   <!-- 버튼 -->
   <div id="controls">
     <button onclick="resetGame()">다시 시작</button>
+    <button onclick="undoMove()">한 수 무르기</button>
     <button onclick="resetScore()">스코어 리셋</button>
   </div>
 
 </div>
 
-<canvas id="board" width="600" height="600"></canvas>
+<div class="board-wrap"><canvas id="board" width="600" height="600" aria-label="오목판. 빈 교차점을 눌러 돌을 놓으세요."></canvas></div>
+<p class="hint">빈 교차점을 눌러 착수 · 흑과 백 모두 10초 제한 · 마지막 수는 초록색으로 표시</p>
+</section>
 
 <script>
 /* ===== 기본 설정 ===== */
@@ -182,6 +110,7 @@ function handleTimeoutLoss(){
 
   updateScore();
   gameOver = true;
+  wonOnLastMove = false;
 }
 
 /* ===== 사운드 ===== */
@@ -233,7 +162,10 @@ function playTimeoutWinSound(){
 
 /* ===== 상태 ===== */
 let board,current,gameOver;
+let wonOnLastMove=false;
 let hover=null;
+let lastMove=null;
+let moveHistory=[];
 let scoreBlack = 0;
 let scoreWhite = 0;
 let turnTime = 10;
@@ -246,7 +178,10 @@ function resetGame(){
   board=Array.from({length:SIZE},()=>Array(SIZE).fill(0));
   current=BLACK;
   gameOver=false;
+  wonOnLastMove=false;
   hover=null;
+  lastMove=null;
+  moveHistory=[];
   msg.textContent="";
   updateTurn();
   draw();
@@ -271,6 +206,26 @@ function resetScore(){
   updateScore();
 }
 
+function undoMove(){
+  if(gameOver && !wonOnLastMove){
+    gameOver=false;msg.textContent="";updateTurn();draw();startTurnTimer();return;
+  }
+  if(!moveHistory.length) return;
+  const move=moveHistory.pop();
+  stopTurnTimer();
+  if(gameOver){
+    if(move.player===BLACK) scoreBlack=Math.max(0,scoreBlack-1);
+    else scoreWhite=Math.max(0,scoreWhite-1);
+  }
+  board[move.y][move.x]=0;
+  current=move.player;
+  gameOver=false;
+  wonOnLastMove=false;
+  lastMove=moveHistory.length?moveHistory[moveHistory.length-1]:null;
+  msg.textContent="";
+  updateScore();updateTurn();draw();startTurnTimer();
+}
+
 function playForbiddenSound(){
   const o = audioCtx.createOscillator();
   const g = audioCtx.createGain();
@@ -291,6 +246,7 @@ function playForbiddenSound(){
 /* ===== 그리기 ===== */
 function draw(){
   ctx.clearRect(0,0,600,600);
+  ctx.fillStyle="#d8b56a";ctx.fillRect(0,0,600,600);
   ctx.strokeStyle="#333";
 
   for(let i=0;i<SIZE;i++){
@@ -304,16 +260,29 @@ function draw(){
     ctx.stroke();
   }
 
+  // 바둑판의 기준점
+  ctx.fillStyle="#4a3824";
+  for(const [x,y] of [[3,3],[3,16],[16,3],[16,16],[9,9]]){
+    ctx.beginPath();ctx.arc(CELL/2+x*CELL,CELL/2+y*CELL,3.2,0,Math.PI*2);ctx.fill();
+  }
+
   for(let y=0;y<SIZE;y++)
     for(let x=0;x<SIZE;x++)
       if(board[y][x]) drawStone(x,y,board[y][x]);
 
+  if(lastMove){
+    ctx.strokeStyle="#a6f28a";ctx.lineWidth=2;
+    ctx.strokeRect(CELL/2+lastMove.x*CELL-4,CELL/2+lastMove.y*CELL-4,8,8);
+  }
+
   // 금수 hover 표시
   if(hover && isForbiddenMove(hover.y,hover.x,current)){
-    ctx.fillStyle="red";
+    ctx.fillStyle="#ed634f";
     ctx.beginPath();
     ctx.arc(CELL/2+hover.x*CELL,CELL/2+hover.y*CELL,5,0,Math.PI*2);
     ctx.fill();
+  }else if(hover){
+    ctx.globalAlpha=.55;drawStone(hover.x,hover.y,current);ctx.globalAlpha=1;
   }
 }
 
@@ -328,8 +297,8 @@ function drawStone(x,y,c){
 canvas.addEventListener("mousemove",e=>{
   if(gameOver){hover=null;draw();return;}
   const r=canvas.getBoundingClientRect();
-  const x=Math.floor((e.clientX-r.left)/CELL);
-  const y=Math.floor((e.clientY-r.top)/CELL);
+  const x=Math.round((e.clientX-r.left)*SIZE/r.width-.5);
+  const y=Math.round((e.clientY-r.top)*SIZE/r.height-.5);
   hover=(x>=0&&y>=0&&x<SIZE&&y<SIZE&&board[y][x]===0)?{x,y}:null;
   draw();
 });
@@ -346,8 +315,8 @@ canvas.addEventListener("click", e => {
   if (gameOver) return;
 
   const rect = canvas.getBoundingClientRect();
-  const x = Math.floor((e.clientX - rect.left) / CELL);
-  const y = Math.floor((e.clientY - rect.top) / CELL);
+  const x = Math.round((e.clientX - rect.left) * SIZE / rect.width - .5);
+  const y = Math.round((e.clientY - rect.top) * SIZE / rect.height - .5);
 
   if (x < 0 || y < 0 || x >= SIZE || y >= SIZE) return;
   if (board[y][x] !== 0) return;
@@ -362,6 +331,8 @@ canvas.addEventListener("click", e => {
 
   // ✅ 정상 착수
   board[y][x] = current;
+  lastMove={x,y,player:current};
+  moveHistory.push(lastMove);
 
   const maxL = getMaxLine(y, x, current);
 
@@ -384,6 +355,7 @@ canvas.addEventListener("click", e => {
 
     updateScore();
     gameOver = true;
+    wonOnLastMove = true;
     return;
   }
 

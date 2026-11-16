@@ -6,11 +6,13 @@ export default defineConfig({
     rollupOptions: {
       input: [
         "index.html",
+        "starfall.html",
         "block_breaker.html",
         "contra.html",
         "fortress.html",
         "galaga.html",
         "omok.html",
+        "go.html",
         "tetris.html",
         "tetris_2p.html",
         "twin_cobra.html",

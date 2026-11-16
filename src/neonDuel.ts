@@ -3,6 +3,7 @@ import Phaser from "phaser";
 const W = 900, H = 560, TARGET = 5, SPEED = 230;
 type Fighter = { x: number; y: number; dx: number; dy: number; score: number; cooldown: number; keys: Record<string, Phaser.Input.Keyboard.Key>; touch: { x: number; y: number; fire: boolean } };
 type Bolt = { x: number; y: number; vx: number; vy: number; owner: number; life: number };
+type Explosion = { x: number; y: number; life: number };
 const WALLS = [new Phaser.Geom.Rectangle(423, 175, 54, 70), new Phaser.Geom.Rectangle(423, 315, 54, 70), new Phaser.Geom.Rectangle(280, 263, 75, 34), new Phaser.Geom.Rectangle(545, 263, 75, 34)];
 
 class NeonDuel extends Phaser.Scene {
@@ -11,6 +12,7 @@ class NeonDuel extends Phaser.Scene {
   private soundLabel!: Phaser.GameObjects.Text;
   private p!: [Fighter, Fighter];
   private bolts: Bolt[] = [];
+  private explosions: Explosion[] = [];
   private ended = false;
   private muted = false;
   private audio?: AudioContext;
@@ -51,8 +53,9 @@ class NeonDuel extends Phaser.Scene {
   }
 
   update(_time: number, delta: number): void {
-    if (this.ended) return;
     const dt = Math.min(delta / 1000, 0.04);
+    this.explosions = this.explosions.filter((e) => (e.life -= dt) > 0);
+    if (this.ended) { this.draw(); return; }
     for (const [i, p] of this.p.entries()) {
       p.cooldown = Math.max(0, p.cooldown - delta);
       let dx = Number(p.keys.right.isDown) - Number(p.keys.left.isDown) + p.touch.x;
@@ -75,6 +78,7 @@ class NeonDuel extends Phaser.Scene {
       const target = this.p[1 - b.owner];
       if (Phaser.Math.Distance.Between(b.x, b.y, target.x, target.y) < 19) {
         this.bolts.splice(i, 1);
+        this.explosions.push({ x: target.x, y: target.y, life: .55 });
         this.p[b.owner].score++;
         this.tone(880, .12, "triangle", .05); this.tone(1175, .18, "triangle", .045, .1);
         this.bolts = [];
@@ -126,6 +130,18 @@ class NeonDuel extends Phaser.Scene {
     g.lineStyle(1, 0x7c86bb, .18).lineBetween(W / 2, 80, W / 2, H - 24);
     for (let i = 0; i < WALLS.length; i++) { const w = WALLS[i], c = i % 2 ? 0xff977e : 0x76ead8; g.fillStyle(c, .1).fillRoundedRect(w.x - 7, w.y - 7, w.width + 14, w.height + 14, 9); g.fillStyle(0x202b48).fillRoundedRect(w.x, w.y, w.width, w.height, 6); g.lineStyle(1, c, .8).strokeRoundedRect(w.x, w.y, w.width, w.height, 6); }
     for (const b of this.bolts) { const c = b.owner ? 0xff987f : 0x81f4dc; g.fillStyle(c, .2).fillCircle(b.x, b.y, 12); g.fillStyle(c).fillCircle(b.x, b.y, 4); }
+    for (const e of this.explosions) {
+      const progress = 1 - e.life / .55, alpha = e.life / .55;
+      const radius = 8 + progress * 42;
+      g.lineStyle(3 * alpha, 0xfff2bd, alpha).strokeCircle(e.x, e.y, radius);
+      g.lineStyle(2 * alpha, 0xff987f, alpha * .8).strokeCircle(e.x, e.y, radius * .62);
+      g.fillStyle(0xffd59a, alpha * .75).fillCircle(e.x, e.y, Math.max(2, 11 * (1 - progress)));
+      for (let i = 0; i < 8; i++) {
+        const angle = i * Math.PI / 4 + progress * .35, distance = 10 + progress * 40;
+        const x = e.x + Math.cos(angle) * distance, y = e.y + Math.sin(angle) * distance;
+        g.fillStyle(i % 2 ? 0xff987f : 0xfff2bd, alpha).fillCircle(x, y, Math.max(1, 3 * alpha));
+      }
+    }
     this.p.forEach((p, i) => { const c = i ? 0xff987f : 0x81f4dc; g.fillStyle(c, .16).fillCircle(p.x, p.y, 27); g.fillStyle(i ? 0xffb6a2 : 0xaaffec).fillCircle(p.x, p.y, 17); g.lineStyle(3, c).strokeCircle(p.x, p.y, 17); g.fillStyle(0x152037).fillTriangle(p.x + p.dx * 22, p.y + p.dy * 22, p.x + Math.cos(Math.atan2(p.dy, p.dx) + 2.3) * 13, p.y + Math.sin(Math.atan2(p.dy, p.dx) + 2.3) * 13, p.x + Math.cos(Math.atan2(p.dy, p.dx) - 2.3) * 13, p.y + Math.sin(Math.atan2(p.dy, p.dx) - 2.3) * 13); });
   }
 }

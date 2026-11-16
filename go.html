@@ -1,0 +1,101 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#12201d">
+<title>바둑 · 컴퓨터 대전</title>
+<style>
+*{box-sizing:border-box}body{margin:0;min-height:100vh;padding:24px 12px 36px;background:radial-gradient(ellipse at 50% 0,#263b35,#111a17 65%,#0a100e);color:#f1f6f2;font-family:system-ui,sans-serif}.wrap{width:min(100%,760px);margin:auto}header{display:flex;align-items:center;justify-content:space-between;margin-bottom:14px}h1{margin:0;font-size:clamp(25px,5vw,34px);letter-spacing:-.04em}header a{color:#bde4c5;text-decoration:none;font-size:14px}.card{padding:clamp(12px,3vw,22px);border:1px solid #e4ffdf20;border-radius:20px;background:#192620eF;box-shadow:0 24px 70px #0007}.bar{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:14px;flex-wrap:wrap}.turn{padding:8px 13px;border-radius:999px;background:#2b3931;color:#ced8d0;font-size:14px}.turn.active{background:#d5f2ae;color:#192116;font-weight:750}.score{color:#c2cec5;font-size:14px}.score b{color:white}.status{min-height:27px;margin:8px 0 14px;text-align:center;color:#d7f2ac;font-size:17px;font-weight:700}.board-wrap{width:min(100%,620px);margin:auto;overflow:hidden;border:1px solid #eed19466;border-radius:12px;background:#d6b777}canvas{display:block;width:100%;height:auto;aspect-ratio:1;touch-action:manipulation;cursor:crosshair}.controls{display:flex;flex-wrap:wrap;justify-content:center;gap:8px;margin-top:14px}.controls button{padding:9px 16px;border:1px solid #ffffff24;border-radius:10px;background:#293a30;color:#f1f6f2;font:inherit;cursor:pointer}.controls button:hover{background:#3a5143}.controls button:focus-visible{outline:2px solid #d5f2ae;outline-offset:2px}.hint{margin:12px 0 0;color:#a9b8ae;text-align:center;font-size:12px;line-height:1.6}@media(max-width:460px){body{padding:14px 8px}.card{padding:10px;border-radius:15px}.bar{justify-content:center}.score{width:100%;text-align:center}}
+</style>
+</head>
+<body><main class="wrap"><header><h1>⚫ 바둑</h1><a href="./index.html">← 게임 목록</a></header><section class="card" aria-label="컴퓨터와 바둑 대국">
+<div class="bar"><span id="turn" class="turn active">● 흑 차례</span><div class="score">현재 집계　흑 <b id="black-score">0</b> : <b id="white-score">6.5</b> 백 (덤 6.5집)</div></div>
+<p id="status" class="status" aria-live="polite">흑으로 먼저 두세요.</p>
+<div class="board-wrap"><canvas id="board" width="620" height="620" aria-label="9줄 바둑판"></canvas></div>
+<div class="controls"><button id="pass">패스</button><button id="undo">무르기</button><button id="confirm" hidden>집계 확정</button><button id="resume" hidden>대국 계속</button><button id="new">새 대국</button></div>
+<p class="hint">9줄 바둑 · 사람은 흑, 컴퓨터는 백입니다. 패스 후 집계 단계에서 죽은 돌을 눌러 사석으로 표시하세요.<br>집을 확정하거나 대국을 계속할 수 있습니다. 중국식 집계(돌 + 둘러싼 빈 점), 덤 6.5집 기준입니다.</p>
+</section></main>
+<script>
+(() => {
+  const N=9, PAD=30, STEP=70, KOMI=6.5, BLACK=1, WHITE=2;
+  const canvas=document.querySelector('#board'),ctx=canvas.getContext('2d');
+  const turnEl=document.querySelector('#turn'),statusEl=document.querySelector('#status');
+  let board,turn,finished,scoring,passes,lastMove,history,seen,dead,thinking=false,aiTimer;
+  const clone=b=>b.map(row=>row.slice());
+  const key=b=>b.map(row=>row.join('')).join('');
+  const inside=(x,y)=>x>=0&&y>=0&&x<N&&y<N;
+  const neighbors=(x,y)=>[[x-1,y],[x+1,y],[x,y-1],[x,y+1]].filter(([a,b])=>inside(a,b));
+
+  function groupAt(b,x,y){
+    const color=b[y][x],stones=[],liberties=new Set(),stack=[[x,y]],visited=new Set([`${x},${y}`]);
+    while(stack.length){const [cx,cy]=stack.pop();stones.push([cx,cy]);for(const [nx,ny] of neighbors(cx,cy)){if(!b[ny][nx])liberties.add(`${nx},${ny}`);else if(b[ny][nx]===color&&!visited.has(`${nx},${ny}`)){visited.add(`${nx},${ny}`);stack.push([nx,ny]);}}}
+    return {stones,liberties};
+  }
+
+  function play(x,y,color=b[turn],record=true){
+    if(!inside(x,y)||board[y][x]||finished||thinking)return false;
+    const before=clone(board);board[y][x]=color;let captured=0;
+    for(const [nx,ny] of neighbors(x,y))if(board[ny][nx]===3-color){const group=groupAt(board,nx,ny);if(!group.liberties.size){for(const [gx,gy] of group.stones)board[gy][gx]=0;captured+=group.stones.length;}}
+    if(!groupAt(board,x,y).liberties.size){board=before;statusEl.textContent='자충수는 둘 수 없습니다.';return false;}
+    const position=key(board);if(seen.has(position)){board=before;statusEl.textContent='패 또는 반복 착수는 둘 수 없습니다.';return false;}
+    if(record){history.push({action:'move',board:before,turn,passes,lastMove,finished,captured:capturedBy.slice()});}
+    seen.add(position);capturedBy[color-1]+=captured;turn=3-color;passes=0;lastMove={x,y};
+    statusEl.textContent=captured?`${color===BLACK?'흑':'백'}이 ${captured}점을 따냈습니다.`:'';
+    render();if(!finished&&turn===WHITE)scheduleAI();return true;
+  }
+  let capturedBy=[0,0];
+
+  function pass(){if(finished||scoring||thinking||turn!==BLACK)return;history.push({action:'pass',board:clone(board),turn,passes,lastMove,finished,captured:capturedBy.slice()});passes++;lastMove=null;turn=WHITE;statusEl.textContent='흑 패스. 컴퓨터가 생각 중입니다.';render();scheduleAI();}
+  function score(){
+    const counted=clone(board);
+    for(const point of dead){const [x,y]=point.split(',').map(Number);counted[y][x]=0;}
+    const seenArea=Array.from({length:N},()=>Array(N).fill(false));let black=0,white=0;
+    for(let y=0;y<N;y++)for(let x=0;x<N;x++)if(counted[y][x]){if(counted[y][x]===BLACK)black++;else white++;}
+    for(let y=0;y<N;y++)for(let x=0;x<N;x++)if(!counted[y][x]&&!seenArea[y][x]){const stack=[[x,y]],region=[],colors=new Set();seenArea[y][x]=true;while(stack.length){const [cx,cy]=stack.pop();region.push([cx,cy]);for(const [nx,ny] of neighbors(cx,cy)){if(counted[ny][nx])colors.add(counted[ny][nx]);else if(!seenArea[ny][nx]){seenArea[ny][nx]=true;stack.push([nx,ny]);}}}if(colors.size===1){if(colors.has(BLACK))black+=region.length;else white+=region.length;}}
+    return [black,white+KOMI];
+  }
+  function endGame(){finished=true;scoring=false;thinking=false;clearTimeout(aiTimer);const [b,w]=score();statusEl.textContent=`대국 종료 · ${b>w?'흑 승리':b<w?'백 승리':'무승부'} (${b} : ${w})`;render();}
+  function beginScoring(){scoring=true;thinking=false;clearTimeout(aiTimer);dead.clear();statusEl.textContent='집계 중 · 죽은 돌을 눌러 사석으로 표시하세요.';render();}
+  function passAI(){history.push({action:'pass',board:clone(board),turn,passes,lastMove,finished,captured:capturedBy.slice()});passes++;turn=BLACK;lastMove=null;if(passes>=2){beginScoring();return;}statusEl.textContent='컴퓨터 패스. 흑 차례입니다.';render();}
+  function toggleDead(x,y){if(!board[y][x])return;const group=groupAt(board,x,y),allDead=group.stones.every(([gx,gy])=>dead.has(`${gx},${gy}`));for(const [gx,gy] of group.stones){const point=`${gx},${gy}`;if(allDead)dead.delete(point);else dead.add(point);}statusEl.textContent='사석 표시를 조정한 뒤 집계를 확정하세요.';render();}
+  function resumeGame(){if(!scoring)return;scoring=false;passes=0;turn=BLACK;statusEl.textContent='대국을 계속합니다. 흑 차례입니다.';render();}
+
+  function legalMove(b,x,y,color,known){
+    if(b[y][x])return null;const next=clone(b);next[y][x]=color;let captures=0;
+    for(const [nx,ny] of neighbors(x,y))if(next[ny][nx]===3-color){const g=groupAt(next,nx,ny);if(!g.liberties.size){captures+=g.stones.length;for(const [gx,gy] of g.stones)next[gy][gx]=0;}}
+    if(!groupAt(next,x,y).liberties.size||known.has(key(next)))return null;return {board:next,captures};
+  }
+  function chooseAI(){
+    let best=-Infinity,candidates=[];const center=(N-1)/2;
+    for(let y=0;y<N;y++)for(let x=0;x<N;x++){
+      const result=legalMove(board,x,y,WHITE,seen);if(!result)continue;
+      const own=neighbors(x,y).filter(([a,b])=>board[b][a]===WHITE).length,enemy=neighbors(x,y).filter(([a,b])=>board[b][a]===BLACK).length;
+      let value=result.captures*18+own*2.4+enemy*2.8+Math.max(0,4-Math.abs(x-center)-Math.abs(y-center))*1.25;
+      const g=groupAt(result.board,x,y);value+=Math.min(g.liberties.size,5)*.7;
+      if(g.liberties.size===1)value-=5;
+      // 작은 결정적 흔들림으로 같은 형세에서 매번 같은 수만 두지 않도록 합니다.
+      value+=((x*17+y*31+history.length*13)%11)*.035;
+      if(value>best+.001){best=value;candidates=[[x,y,result]];}else if(Math.abs(value-best)<.001)candidates.push([x,y,result]);
+    }
+    return candidates.length?candidates[Math.floor(Math.random()*candidates.length)]:null;
+  }
+  function scheduleAI(){thinking=true;turnEl.textContent='○ 컴퓨터 생각 중';turnEl.classList.add('active');aiTimer=setTimeout(()=>{thinking=false;if(finished)return;if(passes>0){passAI();return;}const choice=chooseAI();if(!choice){passAI();return;}const [x,y]=choice;play(x,y,WHITE);},420);}
+
+  function render(){
+    ctx.clearRect(0,0,620,620);ctx.fillStyle='#d6b777';ctx.fillRect(0,0,620,620);ctx.strokeStyle='#493a26';ctx.lineWidth=1.25;
+    for(let i=0;i<N;i++){ctx.beginPath();ctx.moveTo(PAD,PAD+i*STEP);ctx.lineTo(PAD+(N-1)*STEP,PAD+i*STEP);ctx.stroke();ctx.beginPath();ctx.moveTo(PAD+i*STEP,PAD);ctx.lineTo(PAD+i*STEP,PAD+(N-1)*STEP);ctx.stroke();}
+    for(const [x,y] of [[2,2],[6,2],[4,4],[2,6],[6,6]]){ctx.beginPath();ctx.arc(PAD+x*STEP,PAD+y*STEP,3.2,0,Math.PI*2);ctx.fillStyle='#493a26';ctx.fill();}
+    for(let y=0;y<N;y++)for(let x=0;x<N;x++)if(board[y][x])stone(x,y,board[y][x],1);
+    for(const point of dead){const [x,y]=point.split(',').map(Number),px=PAD+x*STEP,py=PAD+y*STEP;ctx.strokeStyle='#f05348';ctx.lineWidth=3;ctx.beginPath();ctx.moveTo(px-10,py-10);ctx.lineTo(px+10,py+10);ctx.moveTo(px+10,py-10);ctx.lineTo(px-10,py+10);ctx.stroke();}
+    if(lastMove){ctx.beginPath();ctx.arc(PAD+lastMove.x*STEP,PAD+lastMove.y*STEP,4,0,Math.PI*2);ctx.fillStyle=board[lastMove.y][lastMove.x]===BLACK?'#e7e2d1':'#252525';ctx.fill();}
+    const [b,w]=score();document.querySelector('#black-score').textContent=b;document.querySelector('#white-score').textContent=w.toFixed(1);
+    document.querySelector('#pass').hidden=finished||scoring;document.querySelector('#confirm').hidden=!scoring;document.querySelector('#resume').hidden=!scoring;
+    if(scoring){turnEl.textContent='집계 중';turnEl.classList.remove('active');}else if(finished){turnEl.textContent='대국 종료';turnEl.classList.remove('active');}else if(!thinking){turnEl.textContent=turn===BLACK?'● 흑 차례':'○ 백 차례';turnEl.classList.add('active');}
+  }
+  function stone(x,y,color,alpha){const px=PAD+x*STEP,py=PAD+y*STEP;ctx.globalAlpha=alpha;const grad=ctx.createRadialGradient(px-7,py-8,2,px,py,24);if(color===BLACK){grad.addColorStop(0,'#555');grad.addColorStop(1,'#080909');}else{grad.addColorStop(0,'#fff');grad.addColorStop(1,'#c9c9c5');}ctx.beginPath();ctx.arc(px,py,23,0,Math.PI*2);ctx.fillStyle=grad;ctx.fill();if(color===WHITE){ctx.strokeStyle='#8d8a80';ctx.lineWidth=1;ctx.stroke();}ctx.globalAlpha=1;}
+  function newGame(){clearTimeout(aiTimer);board=Array.from({length:N},()=>Array(N).fill(0));turn=BLACK;finished=false;scoring=false;passes=0;lastMove=null;history=[];seen=new Set([key(board)]);dead=new Set();capturedBy=[0,0];thinking=false;statusEl.textContent='흑으로 먼저 두세요.';render();}
+  function undo(){if(!history.length)return;clearTimeout(aiTimer);thinking=false;let state=history.pop();if(scoring){while(state?.action==='pass'&&history.length)state=history.pop();}scoring=false;board=state.board;turn=state.turn;passes=state.passes;lastMove=state.lastMove;finished=state.finished;capturedBy=state.captured;seen=new Set(history.map(h=>key(h.board)));seen.add(key(board));statusEl.textContent='한 수를 무르고 다시 시작합니다.';render();if(!finished&&turn===WHITE)scheduleAI();}
+  canvas.addEventListener('click',e=>{const r=canvas.getBoundingClientRect();const x=Math.round((e.clientX-r.left)*N/r.width-.5),y=Math.round((e.clientY-r.top)*N/r.height-.5);if(!inside(x,y))return;if(scoring){toggleDead(x,y);return;}if(finished||thinking||turn!==BLACK)return;play(x,y,BLACK);});
+  document.querySelector('#pass').addEventListener('click',pass);document.querySelector('#undo').addEventListener('click',undo);document.querySelector('#confirm').addEventListener('click',()=>{if(scoring)endGame();});document.querySelector('#resume').addEventListener('click',resumeGame);document.querySelector('#new').addEventListener('click',newGame);
+  newGame();
+})();
+</script></body></html>
