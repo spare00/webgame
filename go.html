@@ -4,21 +4,25 @@
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#12201d">
 <title>바둑 · 컴퓨터 대전</title>
 <style>
-*{box-sizing:border-box}body{margin:0;min-height:100vh;padding:24px 12px 36px;background:radial-gradient(ellipse at 50% 0,#263b35,#111a17 65%,#0a100e);color:#f1f6f2;font-family:system-ui,sans-serif}.wrap{width:min(100%,760px);margin:auto}header{display:flex;align-items:center;justify-content:space-between;margin-bottom:14px}h1{margin:0;font-size:clamp(25px,5vw,34px);letter-spacing:-.04em}header a{color:#bde4c5;text-decoration:none;font-size:14px}.card{padding:clamp(12px,3vw,22px);border:1px solid #e4ffdf20;border-radius:20px;background:#192620eF;box-shadow:0 24px 70px #0007}.bar{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:14px;flex-wrap:wrap}.turn{padding:8px 13px;border-radius:999px;background:#2b3931;color:#ced8d0;font-size:14px}.turn.active{background:#d5f2ae;color:#192116;font-weight:750}.score{color:#c2cec5;font-size:14px}.score b{color:white}.status{min-height:27px;margin:8px 0 14px;text-align:center;color:#d7f2ac;font-size:17px;font-weight:700}.board-wrap{width:min(100%,620px);margin:auto;overflow:hidden;border:1px solid #eed19466;border-radius:12px;background:#d6b777}canvas{display:block;width:100%;height:auto;aspect-ratio:1;touch-action:manipulation;cursor:crosshair}.controls{display:flex;flex-wrap:wrap;justify-content:center;gap:8px;margin-top:14px}.controls button{padding:9px 16px;border:1px solid #ffffff24;border-radius:10px;background:#293a30;color:#f1f6f2;font:inherit;cursor:pointer}.controls button:hover{background:#3a5143}.controls button:focus-visible{outline:2px solid #d5f2ae;outline-offset:2px}.hint{margin:12px 0 0;color:#a9b8ae;text-align:center;font-size:12px;line-height:1.6}@media(max-width:460px){body{padding:14px 8px}.card{padding:10px;border-radius:15px}.bar{justify-content:center}.score{width:100%;text-align:center}}
+*{box-sizing:border-box}body{margin:0;min-height:100vh;padding:24px 12px 36px;background:radial-gradient(ellipse at 50% 0,#263b35,#111a17 65%,#0a100e);color:#f1f6f2;font-family:system-ui,sans-serif}.wrap{width:min(100%,760px);margin:auto}header{display:flex;align-items:center;justify-content:space-between;margin-bottom:14px}h1{margin:0;font-size:clamp(25px,5vw,34px);letter-spacing:-.04em}header a{color:#bde4c5;text-decoration:none;font-size:14px}.card{padding:clamp(12px,3vw,22px);border:1px solid #e4ffdf20;border-radius:20px;background:#192620eF;box-shadow:0 24px 70px #0007}.bar{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:14px;flex-wrap:wrap}.turn{padding:8px 13px;border-radius:999px;background:#2b3931;color:#ced8d0;font-size:14px}.turn.active{background:#d5f2ae;color:#192116;font-weight:750}.score{color:#c2cec5;font-size:14px}.score b{color:white}.status{min-height:27px;margin:8px 0 14px;text-align:center;color:#d7f2ac;font-size:17px;font-weight:700}.board-wrap{width:min(100%,620px);margin:auto;overflow:hidden;border:1px solid #eed19466;border-radius:12px;background:#d6b777}canvas{display:block;width:100%;height:auto;aspect-ratio:1;touch-action:manipulation;cursor:crosshair}.controls{display:flex;flex-wrap:wrap;justify-content:center;gap:8px;margin-top:14px}.controls select,.controls button{padding:9px 16px;border:1px solid #ffffff24;border-radius:10px;background:#293a30;color:#f1f6f2;font:inherit;cursor:pointer}.controls button:hover{background:#3a5143}.controls select:focus-visible,.controls button:focus-visible{outline:2px solid #d5f2ae;outline-offset:2px}.hint{margin:12px 0 0;color:#a9b8ae;text-align:center;font-size:12px;line-height:1.6}@media(max-width:460px){body{padding:14px 8px}.card{padding:10px;border-radius:15px}.bar{justify-content:center}.score{width:100%;text-align:center}}
+.counting{margin-top:14px;padding:14px;border:1px solid #ffffff24;border-radius:12px;background:#111c16;line-height:1.7}.counting p{margin:6px 0;white-space:pre-line}.counting button{font:inherit;padding:6px 12px;cursor:pointer}.counting button:focus-visible{outline:2px solid #d5f2ae}
 </style>
 </head>
 <body><main class="wrap"><header><h1>⚫ 바둑</h1><a href="./index.html">← 게임 목록</a></header><section class="card" aria-label="컴퓨터와 바둑 대국">
 <div class="bar"><span id="turn" class="turn active">● 흑 차례</span><div class="score">현재 집계　흑 <b id="black-score">0</b> : <b id="white-score">6.5</b> 백 (덤 6.5집)</div></div>
 <p id="status" class="status" aria-live="polite">흑으로 먼저 두세요.</p>
 <div class="board-wrap"><canvas id="board" width="620" height="620" aria-label="9줄 바둑판"></canvas></div>
-<div class="controls"><button id="pass">패스</button><button id="undo">무르기</button><button id="confirm" hidden>집계 확정</button><button id="resume" hidden>대국 계속</button><button id="new">새 대국</button></div>
-<p class="hint">9줄 바둑 · 사람은 흑, 컴퓨터는 백입니다. 패스 후 집계 단계에서 죽은 돌을 눌러 사석으로 표시하세요.<br>집을 확정하거나 대국을 계속할 수 있습니다. 중국식 집계(돌 + 둘러싼 빈 점), 덤 6.5집 기준입니다.</p>
+<section id="counting" class="counting" aria-label="집계 과정" hidden><strong id="count-title"></strong><p id="count-detail" aria-live="polite"></p><button id="count-next">다음 단계</button><p class="hint">■ 흑 집 · □ 백 집 · × 중립(점수 제외)<br>사석을 변경하면 첫 단계부터 다시 확인합니다.</p></section>
+<div class="controls"><label for="board-size">바둑판 <select id="board-size"><option value="9">9×9 (기본)</option><option value="13">13×13 (약 2배)</option></select></label><button id="pass">패스</button><button id="undo">무르기</button><button id="confirm" hidden>집계 확정</button><button id="resume" hidden>대국 계속</button><button id="new">새 대국</button></div>
+<p class="hint"><span id="board-description">9줄 바둑</span> · 사람은 흑, 컴퓨터는 백입니다. 패스 후 집계 단계에서 죽은 돌을 눌러 사석으로 표시하세요.<br>집을 확정하거나 대국을 계속할 수 있습니다. 판 크기를 바꾸면 새 대국이 시작됩니다.<br>중국식 집계(돌 + 둘러싼 빈 점), 덤 6.5집 기준입니다.</p>
 </section></main>
 <script>
 (() => {
-  const N=9, PAD=30, STEP=70, KOMI=6.5, BLACK=1, WHITE=2;
+  const PAD=30, KOMI=6.5, BLACK=1, WHITE=2;
+  let N=9, STEP=70;
   const canvas=document.querySelector('#board'),ctx=canvas.getContext('2d');
   const turnEl=document.querySelector('#turn'),statusEl=document.querySelector('#status');
+  let countStep=0;
   let board,turn,finished,scoring,passes,lastMove,history,seen,dead,thinking=false,aiTimer;
   const clone=b=>b.map(row=>row.slice());
   const key=b=>b.map(row=>row.join('')).join('');
@@ -31,7 +35,7 @@
     return {stones,liberties};
   }
 
-  function play(x,y,color=b[turn],record=true){
+  function play(x,y,color=turn,record=true){
     if(!inside(x,y)||board[y][x]||finished||thinking)return false;
     const before=clone(board);board[y][x]=color;let captured=0;
     for(const [nx,ny] of neighbors(x,y))if(board[ny][nx]===3-color){const group=groupAt(board,nx,ny);if(!group.liberties.size){for(const [gx,gy] of group.stones)board[gy][gx]=0;captured+=group.stones.length;}}
@@ -45,19 +49,20 @@
   let capturedBy=[0,0];
 
   function pass(){if(finished||scoring||thinking||turn!==BLACK)return;history.push({action:'pass',board:clone(board),turn,passes,lastMove,finished,captured:capturedBy.slice()});passes++;lastMove=null;turn=WHITE;statusEl.textContent='흑 패스. 컴퓨터가 생각 중입니다.';render();scheduleAI();}
-  function score(){
+  function scoreDetails(){
     const counted=clone(board);
     for(const point of dead){const [x,y]=point.split(',').map(Number);counted[y][x]=0;}
-    const seenArea=Array.from({length:N},()=>Array(N).fill(false));let black=0,white=0;
-    for(let y=0;y<N;y++)for(let x=0;x<N;x++)if(counted[y][x]){if(counted[y][x]===BLACK)black++;else white++;}
-    for(let y=0;y<N;y++)for(let x=0;x<N;x++)if(!counted[y][x]&&!seenArea[y][x]){const stack=[[x,y]],region=[],colors=new Set();seenArea[y][x]=true;while(stack.length){const [cx,cy]=stack.pop();region.push([cx,cy]);for(const [nx,ny] of neighbors(cx,cy)){if(counted[ny][nx])colors.add(counted[ny][nx]);else if(!seenArea[ny][nx]){seenArea[ny][nx]=true;stack.push([nx,ny]);}}}if(colors.size===1){if(colors.has(BLACK))black+=region.length;else white+=region.length;}}
-    return [black,white+KOMI];
+    const seenArea=Array.from({length:N},()=>Array(N).fill(false));const stones=[0,0],territory=[0,0],regions=[];
+    for(let y=0;y<N;y++)for(let x=0;x<N;x++)if(counted[y][x]){stones[counted[y][x]-1]++;}
+    for(let y=0;y<N;y++)for(let x=0;x<N;x++)if(!counted[y][x]&&!seenArea[y][x]){const stack=[[x,y]],region=[],colors=new Set();seenArea[y][x]=true;while(stack.length){const [cx,cy]=stack.pop();region.push([cx,cy]);for(const [nx,ny] of neighbors(cx,cy)){if(counted[ny][nx])colors.add(counted[ny][nx]);else if(!seenArea[ny][nx]){seenArea[ny][nx]=true;stack.push([nx,ny]);}}}const owner=colors.size===1?[...colors][0]:0;regions.push({points:region,owner});if(owner)territory[owner-1]+=region.length;}
+    return {stones,territory,regions,totals:[stones[0]+territory[0],stones[1]+territory[1]+KOMI]};
   }
-  function endGame(){finished=true;scoring=false;thinking=false;clearTimeout(aiTimer);const [b,w]=score();statusEl.textContent=`대국 종료 · ${b>w?'흑 승리':b<w?'백 승리':'무승부'} (${b} : ${w})`;render();}
-  function beginScoring(){scoring=true;thinking=false;clearTimeout(aiTimer);dead.clear();statusEl.textContent='집계 중 · 죽은 돌을 눌러 사석으로 표시하세요.';render();}
+  function score(){return scoreDetails().totals;}
+  function endGame(){countStep=3;finished=true;scoring=false;thinking=false;clearTimeout(aiTimer);const [b,w]=score();statusEl.textContent=`대국 종료 · ${b>w?'흑 승리':b<w?'백 승리':'무승부'} (${b} : ${w})`;render();}
+  function beginScoring(){countStep=0;scoring=true;thinking=false;clearTimeout(aiTimer);dead.clear();statusEl.textContent='집계 중 · 죽은 돌을 눌러 사석으로 표시하세요.';render();}
   function passAI(){history.push({action:'pass',board:clone(board),turn,passes,lastMove,finished,captured:capturedBy.slice()});passes++;turn=BLACK;lastMove=null;if(passes>=2){beginScoring();return;}statusEl.textContent='컴퓨터 패스. 흑 차례입니다.';render();}
-  function toggleDead(x,y){if(!board[y][x])return;const group=groupAt(board,x,y),allDead=group.stones.every(([gx,gy])=>dead.has(`${gx},${gy}`));for(const [gx,gy] of group.stones){const point=`${gx},${gy}`;if(allDead)dead.delete(point);else dead.add(point);}statusEl.textContent='사석 표시를 조정한 뒤 집계를 확정하세요.';render();}
-  function resumeGame(){if(!scoring)return;scoring=false;passes=0;turn=BLACK;statusEl.textContent='대국을 계속합니다. 흑 차례입니다.';render();}
+  function toggleDead(x,y){if(!board[y][x])return;countStep=0;const group=groupAt(board,x,y),allDead=group.stones.every(([gx,gy])=>dead.has(`${gx},${gy}`));for(const [gx,gy] of group.stones){const point=`${gx},${gy}`;if(allDead)dead.delete(point);else dead.add(point);}statusEl.textContent='사석 표시를 조정한 뒤 집계를 확정하세요.';render();}
+  function resumeGame(){if(!scoring)return;scoring=false;dead.clear();passes=0;turn=BLACK;statusEl.textContent='대국을 계속합니다. 흑 차례입니다.';render();}
 
   function legalMove(b,x,y,color,known){
     if(b[y][x])return null;const next=clone(b);next[y][x]=color;let captures=0;
@@ -71,7 +76,17 @@
       const own=neighbors(x,y).filter(([a,b])=>board[b][a]===WHITE).length,enemy=neighbors(x,y).filter(([a,b])=>board[b][a]===BLACK).length;
       let value=result.captures*18+own*2.4+enemy*2.8+Math.max(0,4-Math.abs(x-center)-Math.abs(y-center))*1.25;
       const g=groupAt(result.board,x,y);value+=Math.min(g.liberties.size,5)*.7;
-      if(g.liberties.size===1)value-=5;
+      // Reward saving threatened groups once, even if the move touches them twice.
+      const checked=new Set();
+      for(const [nx,ny] of neighbors(x,y))if(board[ny][nx]&&!checked.has(`${nx},${ny}`)){
+        const before=groupAt(board,nx,ny);
+        for(const [gx,gy] of before.stones)checked.add(`${gx},${gy}`);
+        if(board[ny][nx]===WHITE&&before.liberties.size===1&&g.liberties.size>1)value+=before.stones.length*16;
+        if(board[ny][nx]===BLACK&&result.board[ny][nx]===BLACK&&before.liberties.size>1&&groupAt(result.board,nx,ny).liberties.size===1)value+=before.stones.length*5;
+      }
+      if(g.liberties.size===1)value-=g.stones.length*20;
+      // Keep surrounded points open instead of filling our own eyes.
+      if(!result.captures&&neighbors(x,y).every(([nx,ny])=>board[ny][nx]===WHITE))value-=30;
       // 작은 결정적 흔들림으로 같은 형세에서 매번 같은 수만 두지 않도록 합니다.
       value+=((x*17+y*31+history.length*13)%11)*.035;
       if(value>best+.001){best=value;candidates=[[x,y,result]];}else if(Math.abs(value-best)<.001)candidates.push([x,y,result]);
@@ -83,19 +98,42 @@
   function render(){
     ctx.clearRect(0,0,620,620);ctx.fillStyle='#d6b777';ctx.fillRect(0,0,620,620);ctx.strokeStyle='#493a26';ctx.lineWidth=1.25;
     for(let i=0;i<N;i++){ctx.beginPath();ctx.moveTo(PAD,PAD+i*STEP);ctx.lineTo(PAD+(N-1)*STEP,PAD+i*STEP);ctx.stroke();ctx.beginPath();ctx.moveTo(PAD+i*STEP,PAD);ctx.lineTo(PAD+i*STEP,PAD+(N-1)*STEP);ctx.stroke();}
-    for(const [x,y] of [[2,2],[6,2],[4,4],[2,6],[6,6]]){ctx.beginPath();ctx.arc(PAD+x*STEP,PAD+y*STEP,3.2,0,Math.PI*2);ctx.fillStyle='#493a26';ctx.fill();}
-    for(let y=0;y<N;y++)for(let x=0;x<N;x++)if(board[y][x])stone(x,y,board[y][x],1);
+    const low=N===9?2:3,high=N-1-low,mid=(N-1)/2;
+    for(const [x,y] of [[low,low],[high,low],[mid,mid],[low,high],[high,high]]){ctx.beginPath();ctx.arc(PAD+x*STEP,PAD+y*STEP,3.2,0,Math.PI*2);ctx.fillStyle='#493a26';ctx.fill();}
+    for(let y=0;y<N;y++)for(let x=0;x<N;x++)if(board[y][x])stone(x,y,board[y][x],(scoring||finished)&&dead.has(`${x},${y}`)?.2:1);
     for(const point of dead){const [x,y]=point.split(',').map(Number),px=PAD+x*STEP,py=PAD+y*STEP;ctx.strokeStyle='#f05348';ctx.lineWidth=3;ctx.beginPath();ctx.moveTo(px-10,py-10);ctx.lineTo(px+10,py+10);ctx.moveTo(px+10,py-10);ctx.lineTo(px-10,py+10);ctx.stroke();}
     if(lastMove){ctx.beginPath();ctx.arc(PAD+lastMove.x*STEP,PAD+lastMove.y*STEP,4,0,Math.PI*2);ctx.fillStyle=board[lastMove.y][lastMove.x]===BLACK?'#e7e2d1':'#252525';ctx.fill();}
-    const [b,w]=score();document.querySelector('#black-score').textContent=b;document.querySelector('#white-score').textContent=w.toFixed(1);
+    const details=scoreDetails(),showCount=scoring||finished;
+    document.querySelector('#counting').hidden=!showCount;
+    if(showCount){
+      const {stones,territory,regions,totals}=details;
+      document.querySelector('#count-title').textContent=['1 / 4 · 사석 제외','2 / 4 · 살아 있는 돌 계산','3 / 4 · 둘러싼 빈 점 계산','4 / 4 · 덤을 더해 최종 집계'][countStep];
+      const neutral=regions.filter(r=>!r.owner).reduce((sum,r)=>sum+r.points.length,0);
+      document.querySelector('#count-detail').textContent=[
+        `사석 ${dead.size}개를 계산에서 제외합니다. 죽은 돌을 누르면 표시를 바꿀 수 있습니다. 사석 자리는 빈 점으로 계산합니다.`,
+        `살아 있는 돌: 흑 ${stones[0]}개 / 백 ${stones[1]}개. 중국식 집계에서는 돌 하나가 1점입니다.`,
+        `흑 집 ${territory[0]}점 / 백 집 ${territory[1]}점 / 중립 ${neutral}점. 한 색만 둘러싼 빈 영역을 그 색의 집으로 계산합니다.`,
+        `흑: 돌 ${stones[0]} + 집 ${territory[0]} = ${totals[0]}점\n백: 돌 ${stones[1]} + 집 ${territory[1]} + 덤 ${KOMI} = ${totals[1]}점`
+      ][countStep];
+      document.querySelector('#count-next').textContent=countStep===3?'처음부터 보기':'다음 단계';
+      if(countStep>=2)for(const {points,owner} of regions)for(const [x,y] of points){
+        const px=PAD+x*STEP,py=PAD+y*STEP,size=STEP*.18;
+        ctx.fillStyle=owner===BLACK?'#181818':'#fff';ctx.strokeStyle='#493a26';ctx.lineWidth=1.5;
+        if(owner){ctx.fillRect(px-size,py-size,size*2,size*2);ctx.strokeRect(px-size,py-size,size*2,size*2);}
+        else{ctx.beginPath();ctx.moveTo(px-size/2,py-size/2);ctx.lineTo(px+size/2,py+size/2);ctx.moveTo(px+size/2,py-size/2);ctx.lineTo(px-size/2,py+size/2);ctx.stroke();}
+      }
+    }
+    const [b,w]=details.totals;document.querySelector('#black-score').textContent=b;document.querySelector('#white-score').textContent=w.toFixed(1);
     document.querySelector('#pass').hidden=finished||scoring;document.querySelector('#confirm').hidden=!scoring;document.querySelector('#resume').hidden=!scoring;
     if(scoring){turnEl.textContent='집계 중';turnEl.classList.remove('active');}else if(finished){turnEl.textContent='대국 종료';turnEl.classList.remove('active');}else if(!thinking){turnEl.textContent=turn===BLACK?'● 흑 차례':'○ 백 차례';turnEl.classList.add('active');}
   }
-  function stone(x,y,color,alpha){const px=PAD+x*STEP,py=PAD+y*STEP;ctx.globalAlpha=alpha;const grad=ctx.createRadialGradient(px-7,py-8,2,px,py,24);if(color===BLACK){grad.addColorStop(0,'#555');grad.addColorStop(1,'#080909');}else{grad.addColorStop(0,'#fff');grad.addColorStop(1,'#c9c9c5');}ctx.beginPath();ctx.arc(px,py,23,0,Math.PI*2);ctx.fillStyle=grad;ctx.fill();if(color===WHITE){ctx.strokeStyle='#8d8a80';ctx.lineWidth=1;ctx.stroke();}ctx.globalAlpha=1;}
-  function newGame(){clearTimeout(aiTimer);board=Array.from({length:N},()=>Array(N).fill(0));turn=BLACK;finished=false;scoring=false;passes=0;lastMove=null;history=[];seen=new Set([key(board)]);dead=new Set();capturedBy=[0,0];thinking=false;statusEl.textContent='흑으로 먼저 두세요.';render();}
-  function undo(){if(!history.length)return;clearTimeout(aiTimer);thinking=false;let state=history.pop();if(scoring){while(state?.action==='pass'&&history.length)state=history.pop();}scoring=false;board=state.board;turn=state.turn;passes=state.passes;lastMove=state.lastMove;finished=state.finished;capturedBy=state.captured;seen=new Set(history.map(h=>key(h.board)));seen.add(key(board));statusEl.textContent='한 수를 무르고 다시 시작합니다.';render();if(!finished&&turn===WHITE)scheduleAI();}
-  canvas.addEventListener('click',e=>{const r=canvas.getBoundingClientRect();const x=Math.round((e.clientX-r.left)*N/r.width-.5),y=Math.round((e.clientY-r.top)*N/r.height-.5);if(!inside(x,y))return;if(scoring){toggleDead(x,y);return;}if(finished||thinking||turn!==BLACK)return;play(x,y,BLACK);});
+  function stone(x,y,color,alpha){const px=PAD+x*STEP,py=PAD+y*STEP,radius=STEP*.33;ctx.globalAlpha=alpha;const grad=ctx.createRadialGradient(px-radius*.3,py-radius*.35,2,px,py,radius);if(color===BLACK){grad.addColorStop(0,'#555');grad.addColorStop(1,'#080909');}else{grad.addColorStop(0,'#fff');grad.addColorStop(1,'#c9c9c5');}ctx.beginPath();ctx.arc(px,py,radius,0,Math.PI*2);ctx.fillStyle=grad;ctx.fill();if(color===WHITE){ctx.strokeStyle='#8d8a80';ctx.lineWidth=1;ctx.stroke();}ctx.globalAlpha=1;}
+  function newGame(){countStep=0;clearTimeout(aiTimer);N=Number(document.querySelector('#board-size').value);STEP=(canvas.width-2*PAD)/(N-1);canvas.setAttribute('aria-label',`${N}줄 바둑판`);document.querySelector('#board-description').textContent=`${N}줄 바둑`;board=Array.from({length:N},()=>Array(N).fill(0));turn=BLACK;finished=false;scoring=false;passes=0;lastMove=null;history=[];seen=new Set([key(board)]);dead=new Set();capturedBy=[0,0];thinking=false;statusEl.textContent='흑으로 먼저 두세요.';render();}
+  function undo(){if(!history.length)return;clearTimeout(aiTimer);thinking=false;let state=history.pop();if(scoring){while(state?.action==='pass'&&history.length)state=history.pop();}scoring=false;dead.clear();board=state.board;turn=state.turn;passes=state.passes;lastMove=state.lastMove;finished=state.finished;capturedBy=state.captured;seen=new Set(history.map(h=>key(h.board)));seen.add(key(board));statusEl.textContent='한 수를 무르고 다시 시작합니다.';render();if(!finished&&turn===WHITE)scheduleAI();}
+  canvas.addEventListener('click',e=>{const r=canvas.getBoundingClientRect();const x=Math.round(((e.clientX-r.left)*canvas.width/r.width-PAD)/STEP),y=Math.round(((e.clientY-r.top)*canvas.height/r.height-PAD)/STEP);if(!inside(x,y))return;if(scoring){toggleDead(x,y);return;}if(finished||thinking||turn!==BLACK)return;play(x,y,BLACK);});
   document.querySelector('#pass').addEventListener('click',pass);document.querySelector('#undo').addEventListener('click',undo);document.querySelector('#confirm').addEventListener('click',()=>{if(scoring)endGame();});document.querySelector('#resume').addEventListener('click',resumeGame);document.querySelector('#new').addEventListener('click',newGame);
+  document.querySelector('#count-next').addEventListener('click',()=>{if(scoring||finished){countStep=(countStep+1)%4;render();}});
+  document.querySelector('#board-size').addEventListener('change',newGame);
   newGame();
 })();
 </script></body></html>
